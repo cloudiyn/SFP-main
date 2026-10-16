@@ -168,7 +168,7 @@ Paper 插件不支持 `plugin.yml` 的 `commands` 段，全部命令在
 |---|---|
 | 菜单槽位冲突 | 两个可见按钮抢同一格时 `slotActions` 是 Map，**后一个会静默覆盖前一个** → 报 [错误]；按钮占用 `player-head.slot` 会盖掉顶栏头像 → 报 [注意] |
 | 新增文案键缺失 | 与「关键键」分开查：`mergeDefaults()` 不覆盖老 `messages.yml`，新键（`RECENTLY_ADDED_MESSAGE_KEYS`，目前是 2.11.0 的 `dialogui.*` / `punish.*` / `bot.usage-coords`）缺失时提示手工补键。**必须查磁盘文件**：`Messages#has()` 在 2.11.0 改成只看玩家磁盘上的文件，否则 jar 内置默认文件一带该键就永远返回 true、检查形同虚设 |
-| 失效残留键 | 老配置里若还留着 `clean.yml` 的 `skip-named-items`、`punish.yml` 的 `messages.join-warn-notice` → 提示「已失效、建议删除」 |
+| 失效残留键 | 老配置里若还留着上面两张表里的死键（2.11.0 的 `skip-named-items`、`messages.join-warn-notice`，以及 2.5.0 的 `worlds.only-loaded-chunks`、`trashbin.global`、`stand-on.sneak`、`allow-cross-world`、`currency-name`）→ 逐条列出提示删除 |
 | 扫地 × 垃圾桶冲突 | `to-trashbin: true` 但 `trashbin.enabled: false` = 清扫物直接销毁且不可取回 → 报 [注意] |
 | 权限节点声明 | 代码里 `hasPermission()` 用到的 14 个 `sfpmenu.*` 是否都在 `paper-plugin.yml` 声明（用 `PluginMeta#getPermissions()` 读）→ 缺了报 [错误]（非 OP 玩家会永远没权限） |
 | 假人记录体检 | `bots.yml` 里假人所在世界是否已加载（不加载则下次启动重建一直失败）；`restore-on-start: false` 也提示一次 |
@@ -1009,6 +1009,9 @@ SQLite 的 `ALTER TABLE` 限制：只能加列 / 改列名 / 删列（3.35+）�
 |---|---|
 | `teleport.particle-interval-ticks` | 读进来后从未使用（间隔写死 20 tick）→ 现在真正控制粒子间隔 |
 | `menu.yml` 的 `permission-message` | `MenuConfig#getPermissionMessage()` 无调用点 → 现在是无权限时的提示文案（留空回退 `common.no-permission`） |
+
+> 上面这些死键如果还留在某台服务器的配置文件里，`/sfp test` 会逐条报出来（提示删除）——
+> 排查依据就是 `SelfTest` 里那段按版本累积的失效键清单。
 
 ## 12. 新增功能检查清单
 

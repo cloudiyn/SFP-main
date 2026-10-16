@@ -262,15 +262,25 @@ public final class SelfTest {
 
         // 已被删除的「死键」：老配置里可能还留着，不生效但容易被误以为在起作用
         List<String> staleKeys = new ArrayList<>();
+        // ---- 2.11.0 删除 ----
         if (cm.clean().isSet("skip-named-items")) staleKeys.add("clean.yml 的 skip-named-items");
         if (cm.punish().isSet("messages.join-warn-notice")) {
             staleKeys.add("punish.yml 的 messages.join-warn-notice");
         }
+        // ---- 2.5.0 删除（见 features.md §11）----
+        if (cm.clean().isSet("worlds.only-loaded-chunks")) {
+            staleKeys.add("clean.yml 的 worlds.only-loaded-chunks");
+        }
+        if (cm.trashBin().isSet("global")) staleKeys.add("trashbin.yml 的 global");
+        if (cm.chair().isSet("stand-on.sneak")) staleKeys.add("chair.yml 的 stand-on.sneak");
+        if (cm.teleport().isSet("allow-cross-world") || cm.teleport().isSet("teleport.allow-cross-world")) {
+            staleKeys.add("teleport.yml 的 allow-cross-world");
+        }
+        if (plugin.getConfig().isSet("currency-name")) staleKeys.add("config.yml 的 currency-name");
         if (staleKeys.isEmpty()) {
-            r.ok("配置里没有 2.11.0 已删除的失效键");
+            r.ok("配置里没有已删除的失效键");
         } else {
-            r.warn("这些键在 2.11.0 已失效（留着无害，也完全不起作用，建议删除）："
-                    + String.join("、", staleKeys));
+            r.warn("这些键已被删除（留着无害、也完全不起作用，建议删掉）：" + String.join("、", staleKeys));
         }
 
         // 扫地 × 垃圾桶的组合：to-trashbin 开着但垃圾桶模块关掉 = 清扫物直接销毁且不可取回
