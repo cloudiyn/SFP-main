@@ -75,13 +75,20 @@ public final class DialogMenu {
             if (tooltip != null) {
                 builder.tooltip(tooltip);
             }
-            buttons.add(builder
-                    .action(DialogAction.customClick((view, audience) -> {
-                        if (audience instanceof Player p && p.isOnline()) {
-                            MenuManager.runAction(plugin, p, action);
-                        }
-                    }, options))
-                    .build());
+            if (action == null) {
+                // 说明性按钮（例如介绍告示牌椅子）：与箱子 UI 一样显示出来，但点击不做事
+                buttons.add(builder.action(DialogAction.customClick((view, audience) -> {
+                    // 空回调：仅占位，保持两种界面的按钮集合一致
+                }, options)).build());
+            } else {
+                buttons.add(builder
+                        .action(DialogAction.customClick((view, audience) -> {
+                            if (audience instanceof Player p && p.isOnline()) {
+                                MenuManager.runAction(plugin, p, action);
+                            }
+                        }, options))
+                        .build());
+            }
         }
 
         if (buttons.isEmpty()) return null;

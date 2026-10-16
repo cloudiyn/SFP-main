@@ -29,13 +29,14 @@ public final class PunishConfig extends AbstractConfig {
     // 通用
     private String defaultReason;
     private String permanentText;
+    /** 踢出前的延迟 tick 数：代理环境下需要 >0，见字段下方注释与 PunishListener#onJoin */
+    private int kickDelayTicks;
 
     // 音效
     private String soundPunish;
     private String soundRevoke;
 
     // ===== 玩家提示文案 =====
-    private String joinWarnNotice;      // 有生效警告时进服提示？
     private String muteNotice;          // 被禁言者发言时返回
     private String kickScreenBan;       // 封禁踢下线整屏
     private String kickScreenKick;      // 主动踢出整屏
@@ -57,12 +58,15 @@ public final class PunishConfig extends AbstractConfig {
 
         defaultReason = getString("default-reason", "违反服务器规则");
         permanentText = getString("permanent-text", "永久");
+        // 至少 1 tick：0 会让代理把「刚连上就被踢」当成连接中断而重投下一个子服
+        kickDelayTicks = Math.max(1, getInt("kick-delay-ticks", 1));
 
         soundPunish = getString("sounds.punish", "ENTITY_VILLAGER_NO");
         soundRevoke = getString("sounds.revoke", "BLOCK_ANVIL_LAND");
 
-        joinWarnNotice = getString("messages.join-warn-notice",
-                "<yellow>注意：你当前有未读的处罚记录，输入 <white>/sfpcheck {player}</white> 查看。</yellow>");
+        // 注：2.11.0 起不再有 messages.join-warn-notice（原「进服提示有未读处罚」）。
+        // 警告（WARN）按设计不写生效表、也没有「已读」状态，无法判定「未读」，
+        // 该键从来没有任何调用点，已随本次清理从 punish.yml 移除。
         muteNotice = getString("messages.mute-notice",
                 "<red>你已被禁言</red><newline>"
                         + "<gray>原因：</gray><white>{reason}</white><newline>"
@@ -101,11 +105,12 @@ public final class PunishConfig extends AbstractConfig {
     /** 「永久」的展示文本（占位符 {expire} / {duration} 用） */
     public String getPermanentText() { return permanentText; }
 
+    /** 踢出玩家前的延迟 tick 数（默认 1；代理/跨服环境下不能为 0） */
+    public int getKickDelayTicks() { return kickDelayTicks; }
+
     public String getSoundPunish() { return soundPunish; }
 
     public String getSoundRevoke() { return soundRevoke; }
-
-    public String getJoinWarnNotice() { return joinWarnNotice; }
 
     public boolean isBroadcastPunish() { return broadcastPunish; }
 
@@ -125,11 +130,6 @@ public final class PunishConfig extends AbstractConfig {
     /** 构建禁言提示（聊天被拦截时发回给发言者） */
     public Component muteNotice(Map<String, String> placeholders) {
         return Messages.deserialize(Messages.apply(muteNotice, placeholders));
-    }
-
-    /** 构建进服警告提示 */
-    public Component joinWarnNotice(Map<String, String> placeholders) {
-        return Messages.deserialize(Messages.apply(joinWarnNotice, placeholders));
     }
 
     /** 构建全服广播文本；关闭时返回 null */

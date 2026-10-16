@@ -2,9 +2,9 @@ package cn.starfallplain.sfpmain.teleport.command;
 
 import cn.starfallplain.sfpmain.SfpMain;
 import cn.starfallplain.sfpmain.config.module.TeleportConfig;
+import cn.starfallplain.sfpmain.menu.MenuManager;
 import cn.starfallplain.sfpmain.teleport.TeleportManager;
 import cn.starfallplain.sfpmain.teleport.db.StoredLocation;
-import cn.starfallplain.sfpmain.teleport.gui.WarpListGui;
 import cn.starfallplain.sfpmain.util.NameUtil;
 import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
@@ -82,7 +82,8 @@ public class WarpCommand implements BasicCommand {
         }
 
         if (args.length == 0) {
-            WarpListGui.open(plugin, player, manager, 0);
+            // 与菜单里的「传送点」按钮同一个入口：按玩家偏好分流 dialogUI / 箱子界面
+            MenuManager.openWarpList(plugin, player);
             return;
         }
         teleportWarp(player, args[0]);

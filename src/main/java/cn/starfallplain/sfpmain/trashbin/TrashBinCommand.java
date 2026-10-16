@@ -37,7 +37,7 @@ public class TrashBinCommand implements BasicCommand {
     public void execute(@NotNull CommandSourceStack source, @NotNull String[] args) {
         CommandSender sender = source.getSender();
         if (!(sender instanceof Player player)) {
-            sender.sendMessage("该命令只能由玩家执行。");
+            sender.sendMessage(plugin.getMessage("common.player-only", "<red>该命令只能由玩家执行。</red>"));
             return;
         }
         if (!player.hasPermission("sfpmenu.player")) {

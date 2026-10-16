@@ -13,7 +13,6 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -186,10 +185,5 @@ public final class TeleportListGui {
             item.setItemMeta(meta);
         }
         return item;
-    }
-
-    /** 供外部（监听器）复用的空白灰板 */
-    public static @NotNull ItemStack pane() {
-        return createIcon(Material.GRAY_STAINED_GLASS_PANE, "<!i><dark_gray> </dark_gray>");
     }
 }

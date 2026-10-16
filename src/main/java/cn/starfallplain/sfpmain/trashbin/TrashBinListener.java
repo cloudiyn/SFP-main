@@ -46,13 +46,13 @@ public class TrashBinListener implements Listener {
         // 翻页按钮
         if (slot == TrashBinHolder.SLOT_PREV) {
             if (holder.getPage() > 0) {
-                TrashBinCommand.openPage(plugin, player, manager, holder.getPage() - 1);
+                reopen(plugin, player, manager, holder.getPage() - 1);
             }
             return;
         }
         if (slot == TrashBinHolder.SLOT_NEXT) {
             if (holder.getPage() < manager.getPageCount() - 1) {
-                TrashBinCommand.openPage(plugin, player, manager, holder.getPage() + 1);
+                reopen(plugin, player, manager, holder.getPage() + 1);
             }
             return;
         }
@@ -93,7 +93,7 @@ public class TrashBinListener implements Listener {
         if (newPage > 0 && newPage >= manager.getPageCount()) {
             newPage = manager.getPageCount() - 1;
         }
-        TrashBinCommand.openPage(plugin, player, manager, newPage);
+        reopen(plugin, player, manager, newPage);
 
         // 提示
         if (event.getClick() == ClickType.SHIFT_LEFT || event.getClick() == ClickType.SHIFT_RIGHT) {
@@ -106,5 +106,19 @@ public class TrashBinListener implements Listener {
         if (event.getInventory().getHolder() instanceof TrashBinHolder) {
             event.setCancelled(true);
         }
+    }
+
+    /**
+     * 延迟一 tick 再重开界面。
+     * <p>
+     * 与「返回主菜单」那条路径保持同一种做法：不在 {@code InventoryClickEvent} 回调里直接换 GUI，
+     * 避免同一份代码里出现两种风格（直接换在 Paper 上也能跑，但不保证客户端表现一致）。
+     */
+    private void reopen(SfpMain plugin, Player player, TrashBinManager manager, int page) {
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (player.isOnline()) {
+                TrashBinCommand.openPage(plugin, player, manager, page);
+            }
+        });
     }
 }

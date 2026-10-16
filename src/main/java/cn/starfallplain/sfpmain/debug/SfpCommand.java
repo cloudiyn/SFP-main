@@ -105,6 +105,18 @@ public final class SfpCommand implements BasicCommand {
         String sub = args.length > 1 ? args[1].toLowerCase() : "";
         String playerArg = args.length > 2 ? args[2] : null;
 
+        // 仅处罚模式下没有传送库，/sfp db 改为展示处罚库，并跳过传送专属子命令。
+        if (plugin.getConfigManager().global().isPunishOnly()) {
+            if (sub.isEmpty()) {
+                DbDebug.punishOverview(plugin, sender);
+            } else {
+                DbDebug.send(sender, "<red>仅处罚模式下 /sfp db 只提供概览（无传送库相关子命令）。</red>");
+                DbDebug.send(sender, "<gray>提示：处罚记录请用 <white>/sfpcheck</white> 或 "
+                        + "<white>/sfpcheck &lt;玩家名&gt;</white> 查询。</gray>");
+            }
+            return;
+        }
+
         switch (sub) {
             case "" -> DbDebug.overview(plugin, sender);
             case "tables" -> DbDebug.tables(plugin, sender);

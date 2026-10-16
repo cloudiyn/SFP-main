@@ -4,6 +4,7 @@ import cn.starfallplain.sfpmain.SfpMain;
 import cn.starfallplain.sfpmain.chair.ChairManager;
 import cn.starfallplain.sfpmain.clean.FloorCleanManager;
 import cn.starfallplain.sfpmain.config.ConfigManager;
+import cn.starfallplain.sfpmain.config.Messages;
 import cn.starfallplain.sfpmain.config.module.MenuConfig;
 import cn.starfallplain.sfpmain.menu.MenuClockManager;
 import cn.starfallplain.sfpmain.menu.MenuHolder;
@@ -16,9 +17,11 @@ import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
+import java.io.File;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -61,6 +64,7 @@ public final class SelfTest {
     private static final String[] REQUIRED_MESSAGE_KEYS = {
             "common.no-permission", "common.player-only", "common.feature-disabled", "common.back-to-menu",
             "menu.head-name",
+            "menu.elytra-success", "menu.elytra-not-enough", "menu.elytra-misconfigured",
             "trashbin.title", "trashbin.disabled", "trashbin.prev", "trashbin.next",
             "clean.reminder", "clean.result",
             "home.teleport-success", "home.set-success", "home.not-found",
@@ -71,6 +75,42 @@ public final class SelfTest {
             "tpa.request-to", "tpa.request-here", "tpa.gui-title", "tpa.no-request",
             "punish.warn-received", "punish.warn-applied", "punish.kick-applied",
             "punish.ban-applied", "punish.mute-applied", "punish.unban-applied", "punish.unmute-applied",
+    };
+
+    /**
+     * 核心键之后**新增**的文案键（按版本累积，只增不删）。
+     * <p>
+     * 与 {@link #REQUIRED_MESSAGE_KEYS} 分开报的原因：{@code mergeDefaults()} 只补缺失键、
+     * **不覆盖已存在的键**，所以老服的 messages.yml 里这些新键**不会自动出现**，缺失时会退回
+     * 代码内置的同款文案 —— 功能正常，但运维会以为「我明明在 messages.yml 里改过这句话」。
+     * 所以单独提示一次，让人知道该手工补键或删掉文件重新生成。
+     */
+    private static final String[] RECENTLY_ADDED_MESSAGE_KEYS = {
+            // ---- 2.11.0：dialogUI 列表/选择框文案 ----
+            "dialogui.entry-name", "dialogui.entry-hover-location",
+            "dialogui.home-action-title", "dialogui.home-action-body",
+            "dialogui.home-teleport", "dialogui.home-teleport-hover",
+            "dialogui.home-delete", "dialogui.home-delete-hover",
+            "dialogui.tpa-entry-hover", "dialogui.tpa-direction-title", "dialogui.tpa-direction-body",
+            "dialogui.tpa-to", "dialogui.tpa-to-hover", "dialogui.tpa-here", "dialogui.tpa-here-hover",
+            // ---- 2.11.0：处罚命令的用法与提示（此前硬编码在代码里）----
+            "punish.usage-check", "punish.usage-warn", "punish.usage-kick", "punish.usage-ban",
+            "punish.usage-mute", "punish.usage-unban", "punish.usage-unmute",
+            "punish.time-format-tip", "punish.bad-time", "punish.revoke-tip",
+            "punish.not-banned", "punish.not-muted", "punish.offline", "punish.unknown-player",
+            "punish.no-record", "punish.no-active-punishment", "punish.check-header",
+            "punish.check-footer", "punish.check-active-none", "punish.check-active-entry",
+            "punish.log-line",
+            // ---- 2.11.0：假人坐标用法 ----
+            "bot.usage-coords",
+    };
+
+    /** 代码里实际用到的权限节点（应全部在 paper-plugin.yml 的 permissions 段声明） */
+    private static final String[] USED_PERMISSIONS = {
+            "sfpmenu.player", "sfpmenu.teleport", "sfpmenu.bot", "sfpmenu.admin",
+            "sfpmenu.home.bypass-limit", "sfpmenu.warp.set", "sfpmenu.warp.delete",
+            "sfpmenu.punish.check", "sfpmenu.punish.warn", "sfpmenu.punish.kick",
+            "sfpmenu.punish.ban", "sfpmenu.punish.mute", "sfpmenu.punish.unban", "sfpmenu.punish.unmute",
     };
 
     /** 处罚数据库期望的表与列（schema 漂移检测） */
@@ -93,10 +133,23 @@ public final class SelfTest {
     public static void run(SfpMain plugin, CommandSender sender) {
         Report r = new Report(sender);
         DbDebug.send(sender, "<dark_gray>========== 星落平原 自检 ==========</dark_gray>");
+
+        // 仅处罚模式：非处罚模块根本没装配，跳过它们的检查，避免刷出一屏「未启用」误导运维。
+        if (plugin.getConfigManager().global().isPunishOnly()) {
+            DbDebug.send(sender, "<yellow>工作模式：punish-only（仅处罚），只检查处罚系统。</yellow>");
+            checkConfig(plugin, r);
+            checkPunish(plugin, r);
+            DbDebug.send(sender, "<dark_gray>------------------------------------</dark_gray>");
+            DbDebug.send(sender, "<gray>结果：</gray><green>通过 " + r.ok + "</green>　<yellow>注意 "
+                    + r.warn + "</yellow>　<red>错误 " + r.fail + "</red>");
+            return;
+        }
+
         checkConfig(plugin, r);
         checkMenu(plugin, r, sender);
         checkStorage(plugin, r);
         checkTeleportData(plugin, r);
+        checkBots(plugin, r);
         checkPunish(plugin, r);
         checkModules(plugin, r, sender);
         DbDebug.send(sender, "<dark_gray>------------------------------------</dark_gray>");
@@ -188,9 +241,45 @@ public final class SelfTest {
         if (missingKeys.isEmpty()) {
             r.ok("messages.yml 关键文案键齐全（查了 " + REQUIRED_MESSAGE_KEYS.length + " 个）");
         } else {
-            r.warn("messages.yml 缺少 " + missingKeys.size() + " 个键（会退回代码内置文案）："
+            r.warn("你的 messages.yml 缺少 " + missingKeys.size() + " 个关键键（会退回代码内置文案）："
                     + String.join(", ", missingKeys));
         }
+
+        // 新增键：mergeDefaults() 不会把新键写进已存在的 messages.yml（只补缺失键、不覆盖已有键），
+        // 缺了新键照样能跑（退回内置文案），但改文案的人会找不到键，所以单独报一次
+        List<String> missingNew = new ArrayList<>();
+        for (String key : RECENTLY_ADDED_MESSAGE_KEYS) {
+            if (!cm.messages().has(key)) missingNew.add(key);
+        }
+        if (missingNew.isEmpty()) {
+            r.ok("messages.yml 已包含近期新增的文案键（" + RECENTLY_ADDED_MESSAGE_KEYS.length + " 个）");
+        } else {
+            r.warn("你的 messages.yml 缺少 " + missingNew.size() + " 个近期新增的键"
+                    + "（老配置不会被自动补齐，缺失时用代码内置同款文案）："
+                    + String.join(", ", missingNew)
+                    + " —— 可手工补键，或备份后删掉 messages.yml 让插件重新生成");
+        }
+
+        // 已被删除的「死键」：老配置里可能还留着，不生效但容易被误以为在起作用
+        List<String> staleKeys = new ArrayList<>();
+        if (cm.clean().isSet("skip-named-items")) staleKeys.add("clean.yml 的 skip-named-items");
+        if (cm.punish().isSet("messages.join-warn-notice")) {
+            staleKeys.add("punish.yml 的 messages.join-warn-notice");
+        }
+        if (staleKeys.isEmpty()) {
+            r.ok("配置里没有 2.11.0 已删除的失效键");
+        } else {
+            r.warn("这些键在 2.11.0 已失效（留着无害，也完全不起作用，建议删除）："
+                    + String.join("、", staleKeys));
+        }
+
+        // 扫地 × 垃圾桶的组合：to-trashbin 开着但垃圾桶模块关掉 = 清扫物直接销毁且不可取回
+        if (cm.clean().isEnabled() && cm.clean().isToTrashBin() && !cm.trashBin().isEnabled()) {
+            r.warn("clean.yml 的 to-trashbin 为 true，但垃圾桶模块已关闭（trashbin.yml 的 enabled=false）："
+                    + "清扫物会被直接删除且无法取回 —— 要么打开垃圾桶，要么把 to-trashbin 改成 false");
+        }
+
+        checkPermissions(plugin, r);
 
         // 音效名有效性：resolve 返回 null 就是「无声」，是静默 bug 高发处
         List<String> badSounds = new ArrayList<>();
@@ -202,6 +291,35 @@ public final class SelfTest {
             r.ok("配置的音效名全部有效");
         } else {
             r.fail("以下音效名无法解析（会无声）：" + String.join(", ", badSounds));
+        }
+    }
+
+    /**
+     * 权限节点体检：代码里 {@code hasPermission(...)} 用到的节点必须在本插件的
+     * {@code paper-plugin.yml} 里声明过。
+     * <p>
+     * 未声明的权限对非 OP 玩家等于「未设置」，没有默认值可依 —— 后果是「命令看得见、
+     * 永远没权限」，除了现场试一次很难发现，所以在这里静态查出来。
+     */
+    private static void checkPermissions(SfpMain plugin, Report r) {
+        List<String> declared = new ArrayList<>();
+        try {
+            for (var permission : plugin.getPluginMeta().getPermissions()) {
+                declared.add(permission.getName());
+            }
+        } catch (Throwable t) {
+            r.warn("读取插件权限声明失败，跳过权限检查：" + t);
+            return;
+        }
+        List<String> missing = new ArrayList<>();
+        for (String used : USED_PERMISSIONS) {
+            if (!declared.contains(used)) missing.add(used);
+        }
+        if (missing.isEmpty()) {
+            r.ok("代码用到的权限节点都已在 paper-plugin.yml 声明（" + USED_PERMISSIONS.length + " 个）");
+        } else {
+            r.fail("这些权限节点代码里在用、paper-plugin.yml 却没声明（非 OP 玩家会永远没权限）："
+                    + String.join(", ", missing));
         }
     }
 
@@ -244,6 +362,28 @@ public final class SelfTest {
         else r.fail("按钮槽位越界（不会出现在菜单里）：" + String.join(", ", outOfRange));
         if (unbound.isEmpty()) r.ok("启用的按钮都绑定了动作（缺少动作的只作说明展示）");
         else r.warn("这些按钮既没绑动作也没有说明文案，点了完全没反应：" + String.join(", ", unbound));
+
+        // 槽位冲突：slotActions 是 Map，两个按钮抢同一格时**后一个静默覆盖前一个**，
+        // 界面上少一个按钮却没有任何报错 —— 手改 menu.yml 槽位时最容易踩的坑
+        Map<Integer, String> occupied = new LinkedHashMap<>();
+        List<String> conflicts = new ArrayList<>();
+        for (MenuConfig.Button b : MenuManager.activeButtons(menu, cm)) {
+            String previous = occupied.put(b.getSlot(), b.getId());
+            if (previous != null) {
+                conflicts.add("槽位 " + b.getSlot() + "：" + previous + " 与 " + b.getId());
+            }
+        }
+        if (conflicts.isEmpty()) {
+            r.ok("没有两个按钮抢同一格（" + occupied.size() + " 个按钮各占一格）");
+        } else {
+            r.fail("按钮槽位重复，排在后面的会盖掉前面的（界面上只显示一个）："
+                    + String.join("；", conflicts));
+        }
+        // 玩家头颅与按钮同格：createMainMenu 先放头像、再放按钮 → 按钮会把头像盖掉
+        if (menu.isShowPlayerHead() && occupied.containsKey(menu.getPlayerHeadSlot())) {
+            r.warn("玩家头颅槽位 " + menu.getPlayerHeadSlot() + " 与按钮 "
+                    + occupied.get(menu.getPlayerHeadSlot()) + " 冲突：按钮会盖掉顶栏头像");
+        }
         if (!infoOnly.isEmpty()) {
             DbDebug.send(sender, "<dark_gray>  · 仅作说明展示（有 lore、无动作）："
                     + String.join(", ", infoOnly) + "</dark_gray>");
@@ -255,6 +395,9 @@ public final class SelfTest {
             DbDebug.send(sender, "<dark_gray>  · 槽位 </dark_gray><white>" + e.getKey() + "</white>"
                     + "<dark_gray> → </dark_gray><gray>" + describeAction(e.getValue()) + "</gray>");
         }
+
+        checkElytraExchange(plugin, menu, r);
+        checkLoreDrift(plugin, menu, r);
 
         if (sender instanceof Player player) {
             List<String> lack = new ArrayList<>();
@@ -324,6 +467,130 @@ public final class SelfTest {
         }
     }
 
+    /**
+     * 鞘翅兑换配置检查：两种材料都是 0 会让按钮点了只能提示「不可用」，
+     * 属于「配错了但没人会发现」的高危静默问题，单独查一遍。
+     */
+    private static void checkElytraExchange(SfpMain plugin, MenuConfig menu, Report r) {
+        int diamond = menu.getElytraDiamondCost();
+        int debris = menu.getElytraDebrisCost();
+        if (!menu.isElytraExchangeUsable()) {
+            r.fail("menu.yml 的 elytra-exchange.diamond-cost 与 debris-cost 都是 0 —— "
+                    + "鞘翅兑换按钮点了只会提示「不可用」，请至少把其中一项配成 ≥1");
+            return;
+        }
+        List<String> ways = new ArrayList<>();
+        if (diamond > 0) ways.add(diamond + " 钻石");
+        if (debris > 0) ways.add(debris + " 下界残骸");
+        r.ok("鞘翅兑换：" + String.join(" 或 ", ways)
+                + (ways.size() > 1 ? "（优先扣钻石）" : ""));
+
+        // 按钮 lore 是写死的文案，与配置不一致时提醒（否则界面显示和实际扣费对不上）
+        MenuConfig.Button button = menu.getButton(menu.getElytraButtonId());
+        if (button != null && button.getLore() != null && !button.getLore().isEmpty()) {
+            String lore = String.join(" ", button.getLore());
+            List<String> stale = new ArrayList<>();
+            if (diamond > 0 && !lore.contains(String.valueOf(diamond))) stale.add("钻石数 " + diamond);
+            if (debris > 0 && !lore.contains(String.valueOf(debris))) stale.add("残骸数 " + debris);
+            if (!stale.isEmpty()) {
+                r.warn("按钮 lore 里的数字与 elytra-exchange 配置不一致（" + String.join("、", stale)
+                        + "），玩家看到的文案会与实际扣费不符，请同步改 buttons." + button.getId() + ".lore");
+            }
+        }
+
+        checkElytraPlaceholders(plugin, r);
+    }
+
+    /**
+     * 兑换文案占位符体检：把 messages.yml 里 menu.elytra-* 文案中出现的占位符
+     * 与代码真正会替换的名单比对。
+     * <p>
+     * 背景：{@code mergeDefaults()} 只补缺失键、不覆盖已存在键，所以线上老配置里的
+     * 旧占位符（如 2.10.0 的 {@code {have}}、{@code {cost}}）升级后不会被刷新。
+     * 一旦代码不再提供某个占位符，玩家就会看到字面量 {@code {xxx}} —— 编译期与运行期
+     * 都发现不了，只有真人点一次按钮才看得到，所以在这里静态查出来。
+     */
+    private static void checkElytraPlaceholders(SfpMain plugin, Report r) {
+        // 代码侧目前会替换的全部占位符（含兼容别名）
+        List<String> known = List.of("cost", "cost_text", "cost_need",
+                "diamond", "debris", "diamond_have", "debris_have", "have");
+        Messages messages = plugin.getConfigManager().messages();
+        List<String> problems = new ArrayList<>();
+        for (String key : List.of("menu.elytra-success", "menu.elytra-not-enough",
+                "menu.elytra-misconfigured")) {
+            String text = messages.raw(key, "");
+            if (text == null || text.isEmpty()) continue;
+            for (String ph : placeholdersIn(text)) {
+                if (!known.contains(ph)) problems.add(key + " 里的 {" + ph + "}");
+            }
+        }
+        if (problems.isEmpty()) {
+            r.ok("鞘翅兑换文案的占位符都能被替换（不会显示成字面量）");
+        } else {
+            r.warn("这些占位符在代码里不会被替换，玩家会看到字面量："
+                    + String.join("；", problems) + "（请把该文案改成上面支持的占位符）");
+        }
+    }
+
+    /** 抽出文本里所有 {xxx} 形式的占位符名 */
+    private static List<String> placeholdersIn(String text) {
+        List<String> result = new ArrayList<>();
+        java.util.regex.Matcher matcher =
+                java.util.regex.Pattern.compile("\\{([a-zA-Z_][a-zA-Z0-9_]*)}").matcher(text);
+        while (matcher.find()) {
+            result.add(matcher.group(1));
+        }
+        return result;
+    }
+
+    /**
+     * 菜单按钮 lore 的「写死数字 / 关键字」漂移体检。
+     * <p>
+     * lore 是 menu.yml 里的静态文案，不会自动跟随其它配置：例如把 rtp 冷却改成 20 分钟，
+     * 按钮上仍然写着「10 分钟」，玩家看到的说明就与实际行为不符。这里把能自动比对的几项查出来，
+     * 提示管理员手工同步（鞘翅兑换的数字由 {@link #checkElytraExchange} 单独检查）。
+     * <p>
+     * 无法自动比对的不查：菜单钟 lore 里的「泥土」是材质的中文名，代码里没有 Material→中文的映射表。
+     */
+    private static void checkLoreDrift(SfpMain plugin, MenuConfig menu, Report r) {
+        List<String> stale = new ArrayList<>();
+
+        // 随机传送按钮：lore 里写死的冷却值
+        String rtpLore = buttonLore(menu, menu.getRtpButtonId());
+        if (rtpLore != null) {
+            int seconds = plugin.getConfigManager().teleport().getRtpCooldownSeconds();
+            if (seconds <= 0) {
+                stale.add("随机传送按钮 lore 仍写着冷却，但 rtp.cooldown-seconds 已配成 0（实际无冷却）");
+            } else if (!rtpLore.contains((seconds / 60) + " 分钟") && !rtpLore.contains(seconds + " 秒")) {
+                stale.add("随机传送按钮 lore 的冷却与 rtp.cooldown-seconds（" + seconds + " 秒）不一致");
+            }
+        }
+
+        // 椅子说明按钮：lore 里写死的告示牌关键字（该按钮没有 bind 绑定，id 固定为 chair）
+        String chairLore = buttonLore(menu, "chair");
+        if (chairLore != null) {
+            var chair = plugin.getConfigManager().chair();
+            if (!chairLore.contains(chair.getLeftKeyword()) || !chairLore.contains(chair.getRightKeyword())) {
+                stale.add("椅子说明按钮 lore 的关键字与 chair.yml 的 sign.left-keyword（"
+                        + chair.getLeftKeyword() + "）/ right-keyword（" + chair.getRightKeyword() + "）不一致");
+            }
+        }
+
+        if (stale.isEmpty()) {
+            r.ok("菜单按钮 lore 与相关配置一致（随机传送冷却 / 椅子关键字）");
+        } else {
+            r.warn("菜单按钮 lore 与配置不一致，玩家看到的说明会和实际行为不符："
+                    + String.join("；", stale) + "（请手工同步 menu.yml 里对应按钮的 lore）");
+        }
+    }
+
+    /** 取某按钮 lore 的合并文本；按钮不存在或无 lore 时返回 null */
+    private static String buttonLore(MenuConfig menu, String buttonId) {
+        MenuConfig.Button button = menu.getButton(buttonId);
+        if (button == null || button.getLore() == null || button.getLore().isEmpty()) return null;
+        return String.join(" ", button.getLore());
+    }
+
     private static String describeIngredients(MenuConfig menu) {
         StringJoiner joiner = new StringJoiner(" + ");
         for (Material material : menu.getMenuClockIngredients()) {
@@ -344,6 +611,8 @@ public final class SelfTest {
             case MenuHolder.ACTION_WARP -> "打开传送点列表";
             case MenuHolder.ACTION_BACK -> "执行 /back";
             case MenuHolder.ACTION_TPA -> "打开玩家传送目标选择界面";
+            case MenuHolder.ACTION_RTP -> "执行 /rtp 随机传送";
+            case MenuHolder.ACTION_ELYTRA -> "消耗钻石兑换鞘翅";
             case MenuHolder.ACTION_TOGGLE_UI -> "切换界面样式（dialogUI / 箱子）";
             default -> action;
         };
@@ -471,7 +740,7 @@ public final class SelfTest {
             return;
         }
         var db = manager.getDatabase();
-        r.ok("数据库可连接：" + db.getFile().getName()
+        r.ok("数据库可连接：" + db.getFile().getAbsolutePath()
                 + "（" + (db.getFile().length() / 1024) + " KB）");
 
         Connection c = db.getConnection();
@@ -510,6 +779,16 @@ public final class SelfTest {
         checkSound(punishConfig.getSoundRevoke(), "sounds.revoke", badSounds);
         if (badSounds.isEmpty()) r.ok("处罚音效名全部有效");
         else r.fail("以下处罚音效名无法解析（会无声）：" + String.join(", ", badSounds));
+
+        // 踢出延迟：配置里写 <=0 时代码会夹到 1，此处提示运维（跨服环境尤其重要）
+        int rawKickDelay = punishConfig.raw().getInt("kick-delay-ticks", 1);
+        if (rawKickDelay < 1) {
+            r.warn("punish.yml 的 kick-delay-ticks = " + rawKickDelay
+                    + "，代码已强制按 1 处理；跨服（Velocity/BungeeCord）环境建议保持 ≥ 1，"
+                    + "否则被封禁玩家可能卡在「加载地形中」");
+        } else {
+            r.ok("踢出延迟 kick-delay-ticks = " + rawKickDelay + " tick");
+        }
     }
 
     private static int countRows(Connection c, String sql) {
@@ -517,6 +796,52 @@ public final class SelfTest {
             return rs.next() ? rs.getInt(1) : 0;
         } catch (SQLException e) {
             return -1;
+        }
+    }
+
+    // ==================== 假人记录 ====================
+
+    /**
+     * 假人记录体检：{@code bots.yml} 里的假人会在下次启动时被重建，
+     * 若记录指向的世界不存在，重建会一直失败（记录保留，但假人永远不在线，
+     * 而且除了翻启动日志没人会发现）。
+     */
+    private static void checkBots(SfpMain plugin, Report r) {
+        r.section("假人记录");
+        var cfg = plugin.getConfigManager().bot();
+        if (!cfg.isEnabled()) {
+            r.warn("假人模块未启用（bot.yml 的 enabled 为 false），跳过检查");
+            return;
+        }
+        var manager = plugin.getBotManager();
+        if (manager == null) {
+            r.fail("假人管理器未创建 —— 检查启动日志");
+            return;
+        }
+        r.ok("已记录 " + manager.size() + " 个假人（当前已加入 " + manager.onlineCount() + " 个）");
+        if (!cfg.isRestoreOnStart()) {
+            r.warn("restore-on-start 为 false：重启服务器后假人不会自动重建");
+        }
+
+        File file = new File(plugin.getDataFolder(), "bots.yml");
+        if (!file.isFile()) {
+            r.ok("还没有 bots.yml（没有创建过假人）");
+            return;
+        }
+        YamlConfiguration yml = YamlConfiguration.loadConfiguration(file);
+        var section = yml.getConfigurationSection("bots");
+        if (section == null) return;
+
+        List<String> broken = new ArrayList<>();
+        for (String key : section.getKeys(false)) {
+            String world = yml.getString("bots." + key + ".world", "");
+            if (Bukkit.getWorld(world) == null) broken.add(key + "@" + world);
+        }
+        if (broken.isEmpty()) {
+            r.ok("bots.yml 里所有假人所在的世界都已加载");
+        } else {
+            r.warn("这些假人记录指向不存在/未加载的世界（下次启动重建会失败，可手工删掉对应条目）："
+                    + String.join(", ", broken));
         }
     }
 

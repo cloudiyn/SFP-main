@@ -98,10 +98,39 @@ public final class PunishDatabase {
         if (!plugin.getDataFolder().exists() && !plugin.getDataFolder().mkdirs()) {
             plugin.getLogger().warning("无法创建插件数据目录，处罚数据库可能无法保存。");
         }
-        this.dbFile = new File(plugin.getDataFolder(), fileName);
+        this.dbFile = resolveDbFile(plugin, fileName);
         connect();
         initSchema();
     }
+
+    /**
+     * 解析数据库文件位置，支持三种写法：
+     * <ul>
+     *   <li><b>相对文件名</b>（如 {@code punish.db}）—— 放在插件数据目录
+     *       {@code plugins/SFP-main/} 下，与旧行为一致；</li>
+     *   <li><b>相对路径</b>（如 {@code data/punish.db}）—— 同样相对插件数据目录；</li>
+     *   <li><b>绝对路径</b>（如 {@code /opt/mc/shared/punish.db} 或 Windows 的
+     *       {@code D:/mc/shared/punish.db}）—— 直接使用，可用于接入现成的封禁数据库，
+     *       或把数据放到插件目录之外（如挂载盘、跨服共享目录）。</li>
+     * </ul>
+     * 绝对路径的父目录若不存在会自动创建，避免 SQLite 打开时报
+     * {@code path to database does not exist}。
+     */
+    private static File resolveDbFile(JavaPlugin plugin, String configured) {
+        String raw = configured == null ? "" : configured.trim();
+        if (raw.isEmpty()) raw = "punish.db";
+        File file = new File(raw);
+        if (!file.isAbsolute()) {
+            file = new File(plugin.getDataFolder(), raw);
+        }
+        File parent = file.getParentFile();
+        if (parent != null && !parent.exists() && !parent.mkdirs()) {
+            plugin.getLogger().warning("无法创建处罚数据库目录：" + parent.getAbsolutePath()
+                    + "，请检查路径是否存在或权限是否足够。");
+        }
+        return file;
+    }
+
 
     /** 建立连接并加载驱动 */
     private void connect() {

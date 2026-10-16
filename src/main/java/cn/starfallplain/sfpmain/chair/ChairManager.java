@@ -3,6 +3,7 @@ package cn.starfallplain.sfpmain.chair;
 import cn.starfallplain.sfpmain.config.ConfigManager;
 import cn.starfallplain.sfpmain.config.Messages;
 import cn.starfallplain.sfpmain.config.module.ChairConfig;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -134,6 +135,29 @@ public class ChairManager {
      */
     public void onQuit(Player player) {
         standPlayer(player);
+    }
+
+    /**
+     * 插件卸载 / 重载时清理：把所有还坐着的玩家扶起来，并移除隐形的盔甲架座位。
+     * <p>
+     * 不做这一步的话，「玩家还坐着时禁用插件」会留下孤儿盔甲架 —— {@code sittingPlayers}
+     * 映射随本实例一起被丢弃，那些实体再也回收不掉（只能重启服务端或手动清理）。
+     */
+    public void shutdown() {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (isSitting(player)) {
+                standPlayer(player);
+            }
+        }
+        // 兜底：映射里可能还有已下线的玩家（正常路径下 onQuit 已经清过）
+        for (ArmorStand stand : sittingPlayers.values()) {
+            if (stand != null && !stand.isDead()) {
+                stand.eject();
+                stand.remove();
+            }
+        }
+        sittingPlayers.clear();
+        chairBlocks.clear();
     }
 
     /**

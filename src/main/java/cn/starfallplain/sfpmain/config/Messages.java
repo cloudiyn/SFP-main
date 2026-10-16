@@ -6,7 +6,6 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -81,48 +80,20 @@ public final class Messages {
     }
 
     /**
-     * 该键是否存在于 messages.yml（或 jar 内置默认文件）中。
-     * 供 /sfp test 检查文案键是否齐全 —— {@link #raw} 有兜底，光看返回值分不出「缺键」。
+     * 该键是否存在于**玩家磁盘上的** messages.yml 中（**不含** jar 内置兜底文件）。
+     * <p>
+     * 供 {@code /sfp test} 检查「老配置文件是否缺少新键」—— 只看磁盘才能查出来：
+     * 如果连 jar 内置默认文件一起算，那么只要插件本身带了该键就永远返回 true，
+     * 检查形同虚设（2.11.0 修）。注意 {@link #raw} 有兜底，光看取值分不出缺键。
      */
     public boolean has(String key) {
-        if (config != null && config.isSet(key)) return true;
-        return fallback != null && fallback.isSet(key);
-    }
-
-    /** 取字符串列表并逐条解析为 Component（用于多行提示） */
-    public List<Component> components(String key, List<String> fallbackLines) {
-        List<String> lines = config.getStringList(key);
-        if (lines.isEmpty() && fallback != null) {
-            lines = fallback.getStringList(key);
-        }
-        if (lines.isEmpty()) {
-            lines = fallbackLines;
-        }
-        List<Component> result = new ArrayList<>(lines.size());
-        for (String line : lines) {
-            result.add(deserialize(line));
-        }
-        return result;
+        return config != null && config.isSet(key);
     }
 
     /** 解析并发送给指定接收者（支持多行 list 与单行 string） */
     public void send(CommandSender sender, String key, String fallbackText, Map<String, String> placeholders) {
         String value = raw(key, fallbackText);
         sender.sendMessage(deserialize(apply(value, placeholders)));
-    }
-
-    /** 解析并发送多行消息 */
-    public void sendList(CommandSender sender, String key, List<String> fallbackLines, Map<String, String> placeholders) {
-        List<String> lines = config.getStringList(key);
-        if (lines.isEmpty() && fallback != null) {
-            lines = fallback.getStringList(key);
-        }
-        if (lines.isEmpty()) {
-            lines = fallbackLines;
-        }
-        for (String line : lines) {
-            sender.sendMessage(deserialize(apply(line, placeholders)));
-        }
     }
 
     /** 占位符替换：{key} → 值 */
@@ -188,10 +159,5 @@ public final class Messages {
             sb.append(c);
         }
         return sb.toString();
-    }
-
-    /** 供不依赖实例的静态解析使用 */
-    public static MiniMessage mini() {
-        return MM;
     }
 }

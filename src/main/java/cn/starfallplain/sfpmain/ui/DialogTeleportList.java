@@ -17,7 +17,9 @@ import org.bukkit.entity.Player;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * dialogUI 版的家列表 / 传送点列表（两者共用一个实现，{@code home} 区分数据源）。
@@ -29,6 +31,10 @@ import java.util.List;
  * <p>
  * 家列表的条目点击后会再弹「传送 / 删除」选择框（dialogUI 按钮无左右键，
  * 用两步交互补上删除），传送点条目直接传送。
+ * <p>
+ * 全部文案来自 {@code messages.yml}（{@code dialogui.*} / 复用 {@code home.title}、
+ * {@code warp.title}、{@code teleport.prev|next}、{@code common.back-to-menu}），
+ * 与箱子 UI 共用同一批键，不存在写死在代码里的中文。
  */
 public final class DialogTeleportList {
 
@@ -72,8 +78,12 @@ public final class DialogTeleportList {
             StoredLocation loc = home
                     ? manager.getHomeStore().get(player.getUniqueId(), name)
                     : manager.getWarpStore().get(name);
-            Component label = Messages.deserialize("<white>" + name + "</white>");
-            Component tooltip = loc != null ? Messages.deserialize("<gray>" + loc.describe() + "</gray>") : null;
+            Component label = msg(plugin, "dialogui.entry-name", "<white>{name}</white>",
+                    Map.of("name", name));
+            Component tooltip = loc != null
+                    ? msg(plugin, "dialogui.entry-hover-location", "<gray>{location}</gray>",
+                            Map.of("location", loc.describe()))
+                    : null;
 
             final String targetName = name;
             ActionButton.Builder builder = ActionButton.builder(label);
@@ -97,7 +107,8 @@ public final class DialogTeleportList {
             buttons.add(navButton(plugin, "teleport.prev", "<!i><yellow>上一页</yellow>",
                     player, home, currentPage - 1, options));
         }
-        buttons.add(ActionButton.builder(Messages.deserialize("<!i><aqua>返回主菜单</aqua>"))
+        buttons.add(ActionButton.builder(plugin.getMessage("common.back-to-menu",
+                        "<!i><yellow>返回主菜单</yellow>"))
                 .action(DialogAction.customClick((view, audience) -> {
                     if (audience instanceof Player p && p.isOnline()) {
                         MenuManager.openMenuByPreference(plugin, p);
@@ -109,8 +120,16 @@ public final class DialogTeleportList {
                     player, home, currentPage + 1, options));
         }
 
-        Component title = Messages.deserialize("<light_purple>" + (home ? "我的家" : "传送点")
-                + "</light_purple> <gray>- 第 " + (currentPage + 1) + "/" + totalPages + " 页</gray>");
+        // 标题复用箱子 UI 的 home.title / warp.title，保证两种界面标题一致
+        Map<String, String> titlePh = new LinkedHashMap<>();
+        titlePh.put("page", String.valueOf(currentPage + 1));
+        titlePh.put("pages", String.valueOf(totalPages));
+        titlePh.put("total", String.valueOf(names.size()));
+        String titleKey = home ? "home.title" : "warp.title";
+        String titleFallback = home
+                ? "<!i><aqua>我的家</aqua> <gray>- 第 {page}/{pages} 页</gray>"
+                : "<!i><light_purple>传送点</light_purple> <gray>- 第 {page}/{pages} 页</gray>";
+        Component title = msg(plugin, titleKey, titleFallback, titlePh);
 
         Dialog dialog = Dialog.create(builder -> builder
                 .empty()
@@ -131,19 +150,25 @@ public final class DialogTeleportList {
     private static void openHomeActionDialog(SfpMain plugin, Player player,
                                              TeleportManager manager, String name,
                                              ClickCallback.Options options) {
-        Component title = Messages.deserialize("<aqua>我的家</aqua>");
-        Component body = Messages.deserialize("<yellow>" + name + "</yellow> <gray>—— 选择操作</gray>");
+        Map<String, String> ph = Map.of("name", name);
+        Component title = msg(plugin, "dialogui.home-action-title", "<!i><aqua>我的家</aqua>", Map.of());
+        Component body = msg(plugin, "dialogui.home-action-body",
+                "<!i><yellow>{name}</yellow> <gray>—— 选择操作</gray>", ph);
 
-        ActionButton teleport = ActionButton.builder(Messages.deserialize("<green>传送</green>"))
-                .tooltip(Messages.deserialize("<gray>传送到这个家</gray>"))
+        ActionButton teleport = ActionButton.builder(
+                        msg(plugin, "dialogui.home-teleport", "<!i><green>传送</green>", Map.of()))
+                .tooltip(msg(plugin, "dialogui.home-teleport-hover",
+                        "<!i><gray>传送到这个家</gray>", Map.of()))
                 .action(DialogAction.customClick((view, audience) -> {
                     if (audience instanceof Player p && p.isOnline()) {
                         manager.teleportHome(p, name);
                     }
                 }, options))
                 .build();
-        ActionButton delete = ActionButton.builder(Messages.deserialize("<red>删除这个家</red>"))
-                .tooltip(Messages.deserialize("<gray>等同 /delhome " + name + "</gray>"))
+        ActionButton delete = ActionButton.builder(
+                        msg(plugin, "dialogui.home-delete", "<!i><red>删除这个家</red>", Map.of()))
+                .tooltip(msg(plugin, "dialogui.home-delete-hover",
+                        "<!i><gray>等同 /delhome {name}</gray>", ph))
                 .action(DialogAction.customClick((view, audience) -> {
                     if (audience instanceof Player p && p.isOnline()) {
                         manager.deleteHome(p, name);
@@ -165,12 +190,17 @@ public final class DialogTeleportList {
     private static ActionButton navButton(SfpMain plugin, String msgKey, String fallback,
                                           Player player, boolean home, int page,
                                           ClickCallback.Options options) {
-        return ActionButton.builder(Messages.deserialize(plugin.getRawMessage(msgKey, fallback)))
+        return ActionButton.builder(plugin.getMessage(msgKey, fallback))
                 .action(DialogAction.customClick((view, audience) -> {
                     if (audience instanceof Player p && p.isOnline()) {
                         open(plugin, p, home, page);
                     }
                 }, options))
                 .build();
+    }
+
+    /** 取 messages.yml 里的文案（带占位符），解析为组件 */
+    private static Component msg(SfpMain plugin, String key, String fallback, Map<String, String> ph) {
+        return Messages.deserialize(Messages.apply(plugin.getRawMessage(key, fallback), ph));
     }
 }

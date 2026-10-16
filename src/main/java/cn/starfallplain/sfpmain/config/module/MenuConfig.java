@@ -91,6 +91,14 @@ public final class MenuConfig extends AbstractConfig {
     private String backButtonId;
     // 玩家传送（tpa）按钮 id
     private String tpaButtonId;
+    // 随机传送（rtp）按钮 id
+    private String rtpButtonId;
+    // 鞘翅兑换按钮 id
+    private String elytraButtonId;
+    // 鞘翅兑换消耗的钻石数量（0 = 不接受钻石）
+    private int elytraDiamondCost;
+    // 鞘翅兑换消耗的下界残骸数量（0 = 不接受残骸）
+    private int elytraDebrisCost;
     // 界面样式切换按钮 id
     private String uiToggleButtonId;
 
@@ -161,6 +169,14 @@ public final class MenuConfig extends AbstractConfig {
         warpButtonId = getString("bind.warp-button", "warp");
         backButtonId = getString("bind.back-button", "back");
         tpaButtonId = getString("bind.tpa-button", "tpa");
+        rtpButtonId = getString("bind.rtp-button", "rtp");
+        elytraButtonId = getString("bind.elytra-button", "elytra");
+        // 兑换代价（2.10.2 起支持「钻石 或 下界残骸」二选一）：
+        // 两个都填则优先扣钻石，钻石不够再试残骸；填 0 表示不接受该材料。
+        // 兼容旧配置：老的单个 cost 键仍按「钻石数量」读取。
+        int legacyCost = getInt("elytra-exchange.cost", 0);
+        elytraDiamondCost = Math.max(0, getInt("elytra-exchange.diamond-cost", legacyCost > 0 ? legacyCost : 64));
+        elytraDebrisCost = Math.max(0, getInt("elytra-exchange.debris-cost", 8));
         uiToggleButtonId = getString("bind.ui-toggle-button", "ui-toggle");
 
         openPermission = getString("permission", "sfpmenu.player");
@@ -234,6 +250,21 @@ public final class MenuConfig extends AbstractConfig {
     public String getBackButtonId() { return backButtonId; }
 
     public String getTpaButtonId() { return tpaButtonId; }
+
+    public String getRtpButtonId() { return rtpButtonId; }
+
+    public String getElytraButtonId() { return elytraButtonId; }
+
+    /** 兑换一个鞘翅需要的钻石数量（0 = 不接受钻石） */
+    public int getElytraDiamondCost() { return elytraDiamondCost; }
+
+    /** 兑换一个鞘翅需要的下界残骸数量（0 = 不接受残骸） */
+    public int getElytraDebrisCost() { return elytraDebrisCost; }
+
+    /** 两种材料都没配（都填 0）时按钮点了没反应，这里给个兜底：至少要能兑换一次 */
+    public boolean isElytraExchangeUsable() {
+        return elytraDiamondCost > 0 || elytraDebrisCost > 0;
+    }
 
     public String getUiToggleButtonId() { return uiToggleButtonId; }
 

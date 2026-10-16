@@ -3,6 +3,7 @@ package cn.starfallplain.sfpmain.punish;
 import cn.starfallplain.sfpmain.SfpMain;
 import cn.starfallplain.sfpmain.config.module.PunishConfig;
 import cn.starfallplain.sfpmain.util.DurationParser;
+import cn.starfallplain.sfpmain.util.SoundUtil;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
@@ -120,7 +121,7 @@ public final class PunishManager {
             }
             id = sb.toString();
             guard++;
-            // 极端情况下（字符集空间 6^56，几乎不可能）防死循环
+            // 极端情况下（字母表 57 个字符 × 6 位 ≈ 3.4e10 种组合）防死循环
         } while (store.idExists(id) && guard < 1000);
         return id;
     }
@@ -216,6 +217,7 @@ public final class PunishManager {
                 reason, operatorName(operator), now, Punishment.PERMANENT,
                 PunishAction.PUNISH, now));
         config.log("警告 " + id + "：" + targetName + "，原因：" + reason);
+        playSound(operator, config.getSoundPunish());
         return id;
     }
 
@@ -233,6 +235,7 @@ public final class PunishManager {
                 reason, operatorName(operator), now, Punishment.PERMANENT,
                 PunishAction.PUNISH, now));
         config.log("踢出 " + id + "：" + targetName + "，原因：" + reason);
+        playSound(operator, config.getSoundPunish());
 
         Map<String, String> ph = new HashMap<>();
         ph.put("player", targetName);
@@ -242,7 +245,14 @@ public final class PunishManager {
         ph.put("type", PunishmentType.KICK.displayName());
         ph.put("expire", "-");
         ph.put("duration", "-");
-        online.kick(config.kickScreen(PunishmentType.KICK, ph));
+        // 同样延后一 tick 再踢：避免代理把「刚连上就被踢」当成连接中断而重投下一个子服，
+        // 导致客户端卡在「加载地形中」（详见 PunishListener#onJoin 的说明）。
+        var view = config.kickScreen(PunishmentType.KICK, ph);
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            if (online.isOnline()) {
+                online.kick(view);
+            }
+        }, Math.max(1, config.getKickDelayTicks()));
         return id;
     }
 
@@ -282,12 +292,21 @@ public final class PunishManager {
         config.log("处罚 " + id + "：" + type.displayName() + " " + targetName
                 + "（" + (expireAt == Punishment.PERMANENT ? "永久" : DurationParser.format(durationMillis))
                 + "），原因：" + reason);
+        playSound(operator, config.getSoundPunish());
 
-        // 封禁立即把在线玩家踢下线（禁言无需动作，发言时拦截）
+        // 封禁把在线玩家踢下线（禁言无需动作，发言时拦截）。
+        // 同样延后一 tick：代理环境下在「玩家刚连上、尚未站稳」时立刻踢，会被代理
+        // 当作连接中断重投到 try 列表的下一个子服，客户端卡在「加载地形中」。
+        // 延后一 tick 能让代理把它当成一次正常踢出，直接断开并显示原因。
         if (type == PunishmentType.BAN) {
             Player online = Bukkit.getPlayer(target);
             if (online != null) {
-                online.kick(buildBanKickMessage(punishment));
+                var view = buildBanKickMessage(punishment);
+                plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+                    if (online.isOnline()) {
+                        online.kick(view);
+                    }
+                }, Math.max(1, config.getKickDelayTicks()));
             }
         }
         return id;
@@ -309,6 +328,7 @@ public final class PunishManager {
                 type == PunishmentType.BAN ? PunishAction.UNBAN : PunishAction.UNMUTE, now));
         config.log("处罚 " + active.id() + "：" + type.displayName() + " " + active.playerName()
                 + " 已由 " + operatorName(operator) + " 手动解除。");
+        playSound(operator, config.getSoundRevoke());
         return active;
     }
 
@@ -436,6 +456,16 @@ public final class PunishManager {
     /** 执行者名字（控制台给 null，展示层再兜底） */
     private static String operatorName(CommandSender sender) {
         return sender instanceof Player player ? player.getName() : null;
+    }
+
+    /**
+     * 给执行者播放处罚 / 解除音效（音效名取自 punish.yml 的 {@code sounds.punish} / {@code sounds.revoke}）。
+     * 控制台执行时没有可播的对象，直接跳过；音效名无效或留空时 {@link SoundUtil} 静默忽略。
+     */
+    private static void playSound(CommandSender operator, String soundName) {
+        if (operator instanceof Player player && player.isOnline()) {
+            SoundUtil.play(player, player.getLocation(), soundName, 1.0f, 1.0f);
+        }
     }
 
     // ==================== 关闭 ====================

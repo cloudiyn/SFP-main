@@ -78,6 +78,13 @@ public class FloorCleanManager {
         }.runTaskTimer(plugin, 20L, 20L); // 每秒执行
     }
 
+    /**
+     * 执行一次清扫。
+     * <p>
+     * 世界范围内所有 {@link Item} 掉落物一律清除：有自定义名称的（改名物品）不再特殊对待
+     * —— 2.11.0 起取消了 {@code skip-named-items} 开关，改名物品与普通掉落物同待遇，
+     * 由 {@code to-trashbin} 决定是进垃圾桶（可取回）还是直接销毁。
+     */
     private void performClean() {
         List<ItemStack> collected = new ArrayList<>();
         int count = 0;
@@ -86,11 +93,6 @@ public class FloorCleanManager {
             for (Entity entity : world.getEntities()) {
                 if (entity instanceof Item itemEntity) {
                     ItemStack stack = itemEntity.getItemStack();
-                    if (config.isSkipNamedItems() && stack != null && stack.hasItemMeta()
-                            && stack.getItemMeta() != null && stack.getItemMeta().hasDisplayName()) {
-                        // 跳过玩家命名的物品
-                        continue;
-                    }
                     if (stack != null && !stack.getType().isAir()) {
                         collected.add(stack);
                     }

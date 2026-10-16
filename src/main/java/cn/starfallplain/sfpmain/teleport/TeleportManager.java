@@ -36,6 +36,9 @@ import java.util.UUID;
  */
 public final class TeleportManager {
 
+    /** 延迟传送结束前多少 tick 发起目标区块的异步预加载（20 tick = 1 秒） */
+    private static final int PRELOAD_LEAD_TICKS = 20;
+
     private final SfpMain plugin;
     private final TeleportConfig config;
     private final Database database;
@@ -406,6 +409,16 @@ public final class TeleportManager {
         }
     }
 
+    /**
+     * 玩家退出时清理「一次性」运行态：目前只清内部传送标记（1 秒窗口期的临时标志）。
+     * <p>
+     * <b>刻意不清冷却</b>：传送 / 设置家 / 随机传送的冷却都存的是「冷却结束时间戳」，
+     * 玩家退出再进来仍然生效；一旦在这里清掉，就等于给了「重登绕过冷却」的漏洞。
+     */
+    public void clearTransientState(Player player) {
+        internalTeleportFlags.remove(player.getUniqueId());
+    }
+
     // ==================== 传送执行 ====================
 
     /**
@@ -455,7 +468,8 @@ public final class TeleportManager {
      * 若该玩家已有等待中的传送，先静默取消旧的。
      * <p>
      * 倒计时用 ActionBar 显示剩余时间，精度 0.5 秒（每 10 tick 刷新一次）；
-     * 音效与粒子仍按每秒（20 tick）触发一次，避免过于聒噪。
+     * 粒子间隔取自 {@code teleport.particle-interval-ticks}，滴答音效固定每秒一次。
+     * 距离传送还有 1 秒时异步预加载目标区块，避免落地后卡加载。
      */
     private void startDelayedTeleport(Player player, Location dest, int delaySeconds) {
         cancelPending(player, false);
@@ -474,13 +488,25 @@ public final class TeleportManager {
         UUID uuid = player.getUniqueId();
         // 以 10 tick（0.5 秒）为步长驱动，ActionBar 显示剩余时间精确到 0.5 秒
         final int totalTicks = delaySeconds * 20;
+        final int particleInterval = config.getParticleIntervalTicks();
         final int[] elapsedTicks = {0};
+        final int[] sinceParticleTicks = {0};
+        final boolean[] preloaded = {false};
         BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             PendingTeleport current = pendingTeleports.get(uuid);
             if (current == null) return; // 已被打断
             if (!player.isOnline()) return;
 
+            // 提前 1 秒异步预加载目标区块（只做一次）。
+            // 必须留出提前量：真正传送发生在延迟结束那一刻，若等到最后一刻才发加载请求，
+            // 异步加载还没有完成时间，等于完全没有预加载。
+            if (!preloaded[0] && totalTicks - elapsedTicks[0] <= PRELOAD_LEAD_TICKS) {
+                preloaded[0] = true;
+                preloadChunk(current.destination());
+            }
+
             elapsedTicks[0] += 10;
+            sinceParticleTicks[0] += 10;
             final double remaining = Math.max(0, (totalTicks - elapsedTicks[0]) / 20.0);
 
             if (elapsedTicks[0] < totalTicks) {
@@ -489,14 +515,15 @@ public final class TeleportManager {
                         "<yellow>剩余 <white>{time}</white> 秒</yellow>")
                         .replaceText(b -> b.matchLiteral("{time}")
                                 .replacement(formatSeconds(remaining))));
-                // 每满 1 秒：粒子 + 滴答音效
-                if (elapsedTicks[0] % 20 == 0) {
+                // 粒子间隔由 teleport.particle-interval-ticks 决定（默认 20 tick = 每秒一次）
+                if (sinceParticleTicks[0] >= particleInterval) {
+                    sinceParticleTicks[0] = 0;
                     spawnParticles(player);
+                }
+                // 滴答音效固定每秒一次：与粒子间隔解耦，改间隔不会让音效变得过密/过疏
+                if (elapsedTicks[0] % 20 == 0) {
                     SoundUtil.play(player, player.getLocation(), config.getWaitTickSound(), 0.5f, 1.0f);
                 }
-            } else {
-                // 到达前最后一刻：预加载目标区块，避免传送后卡加载
-                preloadChunk(current.destination());
             }
 
             if (elapsedTicks[0] >= totalTicks) {

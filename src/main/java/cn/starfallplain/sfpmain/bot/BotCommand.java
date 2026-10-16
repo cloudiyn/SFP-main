@@ -101,6 +101,13 @@ public class BotCommand implements BasicCommand {
                         "<red>坐标格式不正确，应为数字。</red>", Map.of());
                 return;
             }
+        } else if (args.length > 2) {
+            // 给了世界 / 坐标但没写全（例如 /bot create 名字 world 100 64）：
+            // 必须明确报错，不能静默退回「玩家当前位置」把这两个参数悄悄丢掉
+            plugin.getConfigManager().messages().send(sender, "bot.usage-coords",
+                    "<red>坐标要么不写，要么写全：/bot create <名字> <世界> <x> <y> <z></red>",
+                    Map.of());
+            return;
         } else if (sender instanceof Player player) {
             world = player.getWorld();
             loc = player.getLocation();

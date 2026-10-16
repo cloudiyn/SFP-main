@@ -94,10 +94,11 @@ public class TeleportListener implements Listener {
         }
     }
 
-    /** 退出：清理等待中的传送，并按配置记录当前位置 */
+    /** 退出：清理等待中的传送与一次性运行态，并按配置记录当前位置 */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(PlayerQuitEvent event) {
         manager.cancelPending(event.getPlayer(), false);
+        manager.clearTransientState(event.getPlayer());
         manager.recordOnQuit(event.getPlayer());
     }
 

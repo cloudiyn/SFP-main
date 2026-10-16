@@ -9,6 +9,7 @@ import cn.starfallplain.sfpmain.punish.PunishmentType;
 import cn.starfallplain.sfpmain.util.DurationParser;
 import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -79,7 +80,8 @@ public class PunishCommand implements BasicCommand {
             case "mute" -> timed(sender, args, PunishmentType.MUTE);
             case "unban" -> revoke(sender, args, PunishmentType.BAN);
             case "unmute" -> revoke(sender, args, PunishmentType.MUTE);
-            default -> send(sender, "<red>未知子命令。</red>");
+            default -> send(sender, render("common.unknown-subcommand",
+                    "<red>未知子命令，输入 /sfp 查看用法。</red>", Map.of()));
         }
     }
 
@@ -88,64 +90,77 @@ public class PunishCommand implements BasicCommand {
     /** 按处罚 ID 或玩家名查询处罚历史，并顺带展示「当前生效」状态 */
     private void check(CommandSender sender, String[] args) {
         if (args.length == 0) {
-            send(sender, "<red>用法：/sfpcheck <处罚ID 或 玩家名></red>");
+            send(sender, render("punish.usage-check",
+                    "<red>用法：/sfpcheck <处罚ID 或 玩家名></red>", Map.of()));
             return;
         }
         String keyword = args[0];
         List<PunishLog> logs = manager.query(keyword);
         if (logs.isEmpty()) {
-            send(sender, "<gray>没有找到与 </gray><white>" + keyword + "</white><gray> 相关的处罚记录。</gray>");
+            send(sender, render("punish.no-record",
+                    "<gray>没有找到与 </gray><white>{keyword}</white><gray> 相关的处罚记录。</gray>",
+                    Map.of("keyword", keyword)));
             UUID uuid = manager.resolveTarget(keyword);
             if (uuid != null && manager.activePunishments(uuid).isEmpty()) {
-                send(sender, "<green>该玩家当前状态：无处罚。</green>");
+                send(sender, render("punish.no-active-punishment",
+                        "<green>该玩家当前状态：无处罚。</green>", Map.of()));
             }
             return;
         }
 
-        send(sender, "<dark_gray>========== 处罚记录：</dark_gray><white>" + keyword
-                + "</white><dark_gray> ==========</dark_gray>");
+        send(sender, render("punish.check-header",
+                "<dark_gray>========== 处罚记录：</dark_gray><white>{keyword}</white>"
+                        + "<dark_gray> ==========</dark_gray>", Map.of("keyword", keyword)));
         for (PunishLog log : logs) {
             send(sender, formatLog(log));
         }
-        send(sender, "<dark_gray>共 " + logs.size() + " 条记录。</dark_gray>");
+        send(sender, render("punish.check-footer",
+                "<dark_gray>共 {count} 条记录。</dark_gray>",
+                Map.of("count", String.valueOf(logs.size()))));
 
         // 该玩家的「当前生效处罚」（已做惰性到期判定）
         UUID uuid = manager.resolveTarget(logs.get(0).playerName());
         if (uuid == null) return;
         List<Punishment> active = manager.activePunishments(uuid);
         if (active.isEmpty()) {
-            send(sender, "<gray>当前生效处罚：</gray><green>无处罚</green>");
+            send(sender, render("punish.check-active-none",
+                    "<gray>当前生效处罚：</gray><green>无处罚</green>", Map.of()));
         } else {
             for (Punishment p : active) {
-                send(sender, "<gray>当前生效处罚：</gray><red>" + p.type().displayName()
-                        + "</red><gray> </gray><white>"
-                        + (p.isPermanent() ? manager.getConfig().getPermanentText()
-                                : "剩余 " + DurationParser.format(p.remainingMillis()))
-                        + "</white><gray>（编号 </gray><yellow>" + p.id() + "</yellow><gray>）</gray>");
+                Map<String, String> ph = new HashMap<>();
+                ph.put("type", p.type().displayName());
+                ph.put("duration", p.isPermanent() ? manager.getConfig().getPermanentText()
+                        : "剩余 " + DurationParser.format(p.remainingMillis()));
+                ph.put("id", p.id());
+                send(sender, render("punish.check-active-entry",
+                        "<gray>当前生效处罚：</gray><red>{type}</red><gray> </gray><white>{duration}</white>"
+                                + "<gray>（编号 </gray><yellow>{id}</yellow><gray>）</gray>", ph));
             }
         }
     }
 
-    /** 一条历史日志 → 一行展示 */
-    private String formatLog(PunishLog log) {
-        String time = new SimpleDateFormat(TIME_PATTERN).format(new Date(log.actionAt()));
-        String actionText = log.action() == null ? "处罚" : log.action().displayName();
-        String typeText = log.type() == null ? "处罚" : log.type().displayName();
-        return "<dark_gray>[" + time + "]</dark_gray> <white>" + typeText + "</white>"
-                + " <gray>" + actionText + "</gray>"
-                + " <dark_gray>编号</dark_gray><yellow>" + log.punishmentId() + "</yellow>"
-                + " <dark_gray>· 操作者</dark_gray><white>"
-                + (log.operator() == null ? "控制台" : log.operator()) + "</white>"
-                + " <dark_gray>· 原因</dark_gray><white>"
-                + (log.reason() == null ? manager.getConfig().getDefaultReason() : log.reason())
-                + "</white>";
+    /** 一条历史日志 → 一行展示（文案在 messages.yml 的 punish.log-line） */
+    private Component formatLog(PunishLog log) {
+        Map<String, String> ph = new HashMap<>();
+        ph.put("time", new SimpleDateFormat(TIME_PATTERN).format(new Date(log.actionAt())));
+        ph.put("type", log.type() == null ? "处罚" : log.type().displayName());
+        ph.put("action", log.action() == null ? "处罚" : log.action().displayName());
+        ph.put("id", log.punishmentId());
+        ph.put("operator", log.operator() == null ? "控制台" : log.operator());
+        ph.put("reason", log.reason() == null ? manager.getConfig().getDefaultReason() : log.reason());
+        return render("punish.log-line",
+                "<dark_gray>[{time}]</dark_gray> <white>{type}</white> <gray>{action}</gray>"
+                        + " <dark_gray>编号</dark_gray><yellow>{id}</yellow>"
+                        + " <dark_gray>· 操作者</dark_gray><white>{operator}</white>"
+                        + " <dark_gray>· 原因</dark_gray><white>{reason}</white>", ph);
     }
 
     // ==================== 警告 / 踢出（仅在线） ====================
 
     private void warn(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            send(sender, "<red>用法：/sfpwarn <在线玩家> <原因></red>");
+            send(sender, render("punish.usage-warn",
+                    "<red>用法：/sfpwarn <在线玩家> <原因></red>", Map.of()));
             return;
         }
         Player target = Bukkit.getPlayerExact(args[0]);
@@ -169,7 +184,8 @@ public class PunishCommand implements BasicCommand {
 
     private void kick(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            send(sender, "<red>用法：/sfpkick <在线玩家> <原因></red>");
+            send(sender, render("punish.usage-kick",
+                    "<red>用法：/sfpkick <在线玩家> <原因></red>", Map.of()));
             return;
         }
         Player target = Bukkit.getPlayerExact(args[0]);
@@ -191,18 +207,23 @@ public class PunishCommand implements BasicCommand {
     // ==================== 封禁 / 禁言（可离线） ====================
 
     private void timed(CommandSender sender, String[] args, PunishmentType type) {
-        String label = type == PunishmentType.BAN ? "sfpban" : "sfpmute";
+        boolean ban = type == PunishmentType.BAN;
         if (args.length < 3) {
-            send(sender, "<red>用法：/" + label + " <玩家> <时间> <原因></red>");
-            send(sender, "<dark_gray>时间示例：7d（7天）、12h、1d2h30m、30m、perm（永久）</dark_gray>");
+            send(sender, render(ban ? "punish.usage-ban" : "punish.usage-mute",
+                    ban ? "<red>用法：/sfpban <玩家> <时间> <原因></red>"
+                            : "<red>用法：/sfpmute <玩家> <时间> <原因></red>", Map.of()));
+            send(sender, render("punish.time-format-tip",
+                    "<dark_gray>时间示例：7d（7天）、12h、1d2h30m、30m、perm（永久）</dark_gray>", Map.of()));
             return;
         }
         String targetName = args[0];
         String timeText = args[1];
         long duration = DurationParser.parse(timeText);
         if (duration == -2) {
-            send(sender, "<red>时间格式无法识别：</red><white>" + timeText
-                    + "</white><dark_gray>（示例：7d / 12h / 1d2h30m / perm）</dark_gray>");
+            send(sender, render("punish.bad-time",
+                    "<red>时间格式无法识别：</red><white>{time}</white>"
+                            + "<dark_gray>（示例：7d / 12h / 1d2h30m / perm）</dark_gray>",
+                    Map.of("time", timeText)));
             return;
         }
         UUID uuid = manager.resolveTarget(targetName);
@@ -252,8 +273,11 @@ public class PunishCommand implements BasicCommand {
     private void revoke(CommandSender sender, String[] args, PunishmentType type) {
         boolean ban = type == PunishmentType.BAN;
         if (args.length == 0) {
-            send(sender, ban ? "<red>用法：/sfpunban <玩家名></red>" : "<red>用法：/sfpunmute <玩家名></red>");
-            send(sender, "<dark_gray>目标来自数据库当前名单，输入时会自动补全。</dark_gray>");
+            send(sender, render(ban ? "punish.usage-unban" : "punish.usage-unmute",
+                    ban ? "<red>用法：/sfpunban <玩家名></red>" : "<red>用法：/sfpunmute <玩家名></red>",
+                    Map.of()));
+            send(sender, render("punish.revoke-tip",
+                    "<dark_gray>目标来自数据库当前名单，输入时会自动补全。</dark_gray>", Map.of()));
             return;
         }
         String targetName = args[0];
@@ -264,8 +288,10 @@ public class PunishCommand implements BasicCommand {
         }
         Punishment removed = manager.revoke(sender, uuid, type);
         if (removed == null) {
-            send(sender, ban ? "<yellow>" + targetName + " 当前没有被封禁。</yellow>"
-                    : "<yellow>" + targetName + " 当前没有被禁言。</yellow>");
+            send(sender, render(ban ? "punish.not-banned" : "punish.not-muted",
+                    ban ? "<yellow>{player} 当前没有被封禁。</yellow>"
+                            : "<yellow>{player} 当前没有被禁言。</yellow>",
+                    Map.of("player", targetName)));
             return;
         }
         Map<String, String> ph = placeholders(sender, removed.playerName(), removed.reason(),
@@ -350,28 +376,27 @@ public class PunishCommand implements BasicCommand {
         return ph;
     }
 
-    /** 直接发送一段 MiniMessage（自动兼容传统色码） */
-    private void send(CommandSender sender, String miniMessage) {
-        sender.sendMessage(Messages.deserialize(miniMessage));
-    }
-
     /** 直接发送已构建好的组件 */
-    private void send(CommandSender sender, net.kyori.adventure.text.Component component) {
+    private void send(CommandSender sender, Component component) {
         sender.sendMessage(component);
     }
 
     /** 从 messages.yml 取文案键，替换占位符后返回 Component */
-    private net.kyori.adventure.text.Component render(String key, String fallback,
-                                                      Map<String, String> placeholders) {
+    private Component render(String key, String fallback,
+                             Map<String, String> placeholders) {
         return Messages.deserialize(Messages.apply(plugin.getRawMessage(key, fallback), placeholders));
     }
 
     private void offline(CommandSender sender, String name) {
-        send(sender, "<red>玩家 </red><white>" + name + "</white><red> 不在线。</red>");
+        send(sender, render("punish.offline",
+                "<red>玩家 </red><white>{player}</white><red> 不在线。</red>",
+                Map.of("player", name)));
     }
 
     private void unknownPlayer(CommandSender sender, String name) {
-        send(sender, "<red>找不到玩家 </red><white>" + name
-                + "</white><red>（需该玩家至少进过一次服务器）。</red>");
+        send(sender, render("punish.unknown-player",
+                "<red>找不到玩家 </red><white>{player}</white>"
+                        + "<red>（需该玩家至少进过一次服务器）。</red>",
+                Map.of("player", name)));
     }
 }

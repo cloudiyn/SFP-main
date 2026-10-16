@@ -86,6 +86,16 @@ public final class ConfigManager {
      */
     public List<String> describeState(boolean papiAvailable) {
         List<String> lines = new ArrayList<>();
+
+        // 仅处罚模式：其余模块根本没装配，列出它们只会误导运维，故只报处罚相关项。
+        if (global.isPunishOnly()) {
+            lines.add("  · 工作模式：punish-only（仅处罚）—— 其余模块已跳过装配");
+            lines.add(flagLine("处罚系统（/sfpban /sfpmute /sfpkick /sfpwarn）", punishConfig.isEnabled(), true));
+            lines.add("  · 管理命令：/sfp（reload / status / db / test）");
+            return lines;
+        }
+
+        lines.add("  · 工作模式：full（完整）");
         lines.add(flagLine("菜单 /menu", menuConfig.isEnabled(), true));
         lines.add("  · 菜单钟（右键开菜单）："
                 + (menuConfig.isEnabled() && menuConfig.isMenuClockEnabled() ? "已启用" : "已关闭（配置）"));

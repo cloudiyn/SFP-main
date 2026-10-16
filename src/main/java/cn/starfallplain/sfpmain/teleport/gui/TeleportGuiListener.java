@@ -58,14 +58,14 @@ public class TeleportGuiListener implements Listener {
         // 翻页
         if (slot == TeleportListHolder.SLOT_PREV) {
             if (holder.getPage() > 0) {
-                TeleportListGui.open(plugin, player, manager, holder.getListType(), holder.getPage() - 1);
+                reopenList(player, holder.getListType(), holder.getPage() - 1);
             }
             return;
         }
         if (slot == TeleportListHolder.SLOT_NEXT) {
             int next = holder.getPage() + 1;
-            // 越界时 open 内部会自动夹紧，这里仅在有更多页时才翻
-            TeleportListGui.open(plugin, player, manager, holder.getListType(), next);
+            // 越界时 open 内部会自动夹紧
+            reopenList(player, holder.getListType(), next);
             return;
         }
         if (slot == TeleportListHolder.SLOT_BACK) {
@@ -123,7 +123,7 @@ public class TeleportGuiListener implements Listener {
         plugin.getConfigManager().messages().send(player, "home.del-success",
                 "<green>已删除家「{name}」。</green>", ph);
         // 刷新列表（回到首页）
-        TeleportListGui.open(plugin, player, manager, TeleportListHolder.ListType.HOME, 0);
+        reopenList(player, TeleportListHolder.ListType.HOME, 0);
     }
 
     // ==================== 传送点 ====================
@@ -153,16 +153,32 @@ public class TeleportGuiListener implements Listener {
         ph.put("name", name);
         plugin.getConfigManager().messages().send(player, "warp.del-success",
                 "<green>已删除传送点「{name}」。</green>", ph);
-        TeleportListGui.open(plugin, player, manager, TeleportListHolder.ListType.WARP, 0);
+        reopenList(player, TeleportListHolder.ListType.WARP, 0);
     }
 
     // ==================== 工具 ====================
 
-    private void sendCooldown(Player player, long seconds) {
-        Map<String, String> ph = new HashMap<>();
-        ph.put("seconds", String.valueOf(seconds));
-        plugin.getConfigManager().messages().send(player, "teleport.cooldown",
-                "<red>传送冷却中，请等待 {seconds} 秒。</red>", ph);
+    /**
+     * 延迟一 tick 再重开列表界面。
+     * <p>
+     * 与「返回主菜单」那条路径保持同一种做法：不在 {@code InventoryClickEvent} 回调里直接换 GUI。
+     * 传送到目标界面同理（{@link #reopenTpaTarget}）。
+     */
+    private void reopenList(Player player, TeleportListHolder.ListType type, int page) {
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (player.isOnline()) {
+                TeleportListGui.open(plugin, player, manager, type, page);
+            }
+        });
+    }
+
+    /** 延迟一 tick 重开「选择传送目标」界面（理由同 {@link #reopenList}） */
+    private void reopenTpaTarget(Player player, int page) {
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (player.isOnline()) {
+                TpaTargetGui.open(plugin, player, page);
+            }
+        });
     }
 
     @EventHandler
@@ -183,13 +199,13 @@ public class TeleportGuiListener implements Listener {
 
         if (slot == TpaTargetHolder.SLOT_PREV) {
             if (holder.getPage() > 0) {
-                TpaTargetGui.open(plugin, player, holder.getPage() - 1);
+                reopenTpaTarget(player, holder.getPage() - 1);
             }
             return;
         }
         if (slot == TpaTargetHolder.SLOT_NEXT) {
             // 越界时 open 内部会夹紧
-            TpaTargetGui.open(plugin, player, holder.getPage() + 1);
+            reopenTpaTarget(player, holder.getPage() + 1);
             return;
         }
         if (slot == TpaTargetHolder.SLOT_BACK) {
@@ -211,7 +227,7 @@ public class TeleportGuiListener implements Listener {
         if (target == null) {
             player.sendMessage(plugin.getMessage("tpa.target-offline",
                     "<red>该玩家已离线。</red>"));
-            TpaTargetGui.open(plugin, player, holder.getPage());   // 刷新列表
+            reopenTpaTarget(player, holder.getPage());   // 刷新列表
             return;
         }
 

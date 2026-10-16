@@ -11,11 +11,39 @@
 - 插件名（`name`）：`SFP-main` —— 决定日志前缀与数据目录（`plugins/SFP-main/`）
 - 主类：`cn.starfallplain.sfpmain.SfpMain`（包名 `cn.starfallplain.sfpmain`、主类 `SfpMain`）
 - 元信息文件：`src/main/resources/paper-plugin.yml`（`version` 由 `${version}` 过滤）
-- 当前版本：**2.7.0**（2.7.0 新增处罚系统 + 进服菜单钟提示 + 传送预热 ActionBar 倒计时）
+- 当前版本：**2.11.0**（2.11.0 是一轮「自检修复」：传送粒子间隔 `particle-interval-ticks` 与延迟传送预加载真正生效、`/home` `/warp` 无参按界面偏好分流、处罚音效恢复播放、主菜单按钮上移一行、dialogUI 补齐说明按钮与全部文案外置、代码里的中文全部搬进 messages.yml，并删掉 `clean.skip-named-items` 与 `punish.messages.join-warn-notice` 两个死键；2.10.2 修复鞘翅兑换提示把 MiniMessage 标签当字面量打印的问题，价格改为 64 钻石或 8 下界残骸二选一；2.10.1 修复跨服被封禁玩家卡在「加载地形中」；2.10.0 主菜单新增「鞘翅兑换」按钮；2.9.1 新增「仅处罚」工作模式；2.9.0 菜单新增「随机传送」按钮；2.8.0 处罚数据库位置可配置；2.7.0 新增处罚系统）
 
 ---
 
 ## 0. 全局
+
+### 0.0 工作模式（config.yml 的 `mode`）
+
+| 值 | 说明 |
+|---|---|
+| `full` | 完整模式（默认）：装配全部功能模块 |
+| `punish-only` | **仅处罚模式**：只启动处罚系统 + `/sfp` 管理命令 |
+
+`punish-only` 专为**群组服**设计 —— 子服只负责执行处罚命令，不需要重复跑菜单与传送。
+
+该模式下**不装配**的模块：菜单 / 菜单钟 / 自动扫地 / 垃圾桶 / 椅子 / 传送（含 tpa / rtp）/
+假人 / Tab / 计分板 / 界面偏好库。具体表现为：
+
+1. `SfpMain#onEnable` **跳过**上面对应的 `setupXxx()` 调用（不建数据库、不注册监听器、
+   不生成假人实体），只留 `setupPunish()`；
+2. `SfpMain#registerCommands` 只注册 7 个处罚命令 + `/sfp`，**其余命令完全不注册**
+   （连「未启用」桩也不给，避免群组服玩家看到一堆无用命令）；
+3. `setupPlaceholders()` 直接跳过（本插件此时没有占位符要注册）；
+4. `ConfigManager#describeState` 只报处罚相关项（列出未装配的模块只会误导运维）；
+5. `SelfTest#run` 只跑「配置 + 处罚」两段检查，跳过菜单 / 传送 / 模块检查；
+6. `/sfp db` 改为展示**处罚库**概览（`DbDebug#punishOverview`）—— 此时传送库根本没建，
+   展示它只会得到一句「未启用」。
+
+`mode` 值无法识别时按 `full` 处理并记一条 warning。**模式改动需重启服务器生效**
+（`/sfp reload` 只重载参数，不改变装配结果）。
+
+> 群组服共用同一个处罚库：把各子服 `punish.yml` 的 `database.file` 指向同一绝对路径
+> （如挂载盘位置），详见 §8.3。
 
 ### 0.1 启动流程（`SfpMain#onEnable`）
 
@@ -25,6 +53,7 @@
      └─ loadAll()：依次 new 出 Menu/Clean/TrashBin/Chair/Teleport/Bot 六个 Config
         （每个 Config 构造时就 load() → onLoaded()，把 yml 的值缓存成字段）
 2) 按开关装配模块（顺序有意义）：
+     ★ punish-only 模式下跳过以下全部 setup，只留 setupPunish()
      setupTrashBin()     垃圾桶必须先于扫地（扫地要把物品塞进垃圾桶）
      setupFloorClean()   扫地：new FloorCleanManager（内部 runTaskTimer 每秒 tick）
      setupChair()        椅子：new ChairManager + 注册 ChairListener
@@ -47,8 +76,8 @@
 
 | 文件 | 对应类 | 说明 |
 |---|---|---|
-| `config.yml` | `GlobalConfig` | 全局：`debug`。**不继承 AbstractConfig**，直接走 `plugin.getConfig()` |
-| `menu.yml` | `MenuConfig` | 主菜单标题/尺寸/边框/按钮 + 菜单钟（`menu-clock`） |
+| `config.yml` | `GlobalConfig` | 全局：`mode`（工作模式）、`debug`。**不继承 AbstractConfig**，直接走 `plugin.getConfig()` |
+| `menu.yml` | `MenuConfig` | 主菜单标题/尺寸/边框/按钮 + 菜单钟（`menu-clock`）+ 鞘翅兑换（`elytra-exchange`） |
 | `clean.yml` | `CleanConfig` | 自动扫地 |
 | `trashbin.yml` | `TrashBinConfig` | 垃圾桶 |
 | `chair.yml` | `ChairConfig` | 椅子 |
@@ -66,6 +95,10 @@
 - 取值顺序：配置文件 → 代码内兜底默认值。所以**删掉某个键不会报错，只是回退到默认值**。
 - 占位符统一用花括号 `{key}`（不要用 `%key%`，会与 PAPI 冲突）。
 - 文本渲染优先 MiniMessage；`Messages.convertLegacy()` 兼容传统色码 `&a` / `§a`。
+- **发玩家文案一律用 `Messages#send(sender, key, fallback, placeholders)`**
+  （内部即 `deserialize(apply(...))`）。⚠ **不要把 `Messages.apply(...)` 的返回值（`String`）
+  直接丢给 `Player#sendMessage(String)`** —— Paper 的 `sendMessage(String)` **不解析 MiniMessage**，
+  只认传统 `§` 色码，结果 `<green>…</green>` 会被当字面量原样打印（2.10.2 修的就是这个）。
 
 **启动时会自动补齐缺失键**：`AbstractConfig#mergeDefaults()` 用 jar 内同名 yml 做 defaults，
 `copyDefaults(true)` 后立刻 `save()`。注意它**只补缺失键、不覆盖已存在的键** ——
@@ -117,7 +150,7 @@ Paper 插件不支持 `plugin.yml` 的 `commands` 段，全部命令在
 | `/sfp reload` | `SfpCommand` → `plugin.reloadAll()` | 重载配置。**开关类改动仍需重启**（监听器注册不可逆） |
 | `/sfp status` | `SfpCommand` + `SelfTest#printRuntime` | 模块开关 + 各模块实时数据 |
 | `/sfp db [...]` | `DbDebug` | 概览 / `tables` / `homes` / `warps` / `back` / `check` / `checkpoint` |
-| `/sfp test` | `SelfTest#run` | 六段自检：配置、菜单、传送数据层、传送内容、处罚系统、功能模块 |
+| `/sfp test` | `SelfTest#run` | 七段自检：配置、菜单、传送数据层、传送内容、假人记录、处罚系统、功能模块 |
 
 - 输出文案**写死在 `debug` 包内**（诊断条目多且高度动态，不进 messages.yml），门槛 `sfpmenu.admin`。
 - `/sfp db` 全是只读诊断，**刻意不提供执行任意 SQL**（前缀白名单挡不住 `SELECT 1; DROP TABLE x`
@@ -126,6 +159,19 @@ Paper 插件不支持 `plugin.yml` 的 `commands` 段，全部命令在
   `finally` 里清理，不碰真实玩家数据。
 - 动作解析共用 `MenuManager#resolveSlotActions / resolveAction`，
   所以**自检报出的按钮绑定就是玩家实际点击的结果**。
+- 菜单段的 lore 漂移体检：`checkElytraExchange`（鞘翅价格）+ `checkLoreDrift`
+  （随机传送冷却、椅子关键字）—— 见 §1.0 末尾的说明。
+
+**2.11.0 补齐的自检项**（此前这些「只能靠真人踩一次」）：
+
+| 检查 | 说明 |
+|---|---|
+| 菜单槽位冲突 | 两个可见按钮抢同一格时 `slotActions` 是 Map，**后一个会静默覆盖前一个** → 报 [错误]；按钮占用 `player-head.slot` 会盖掉顶栏头像 → 报 [注意] |
+| 新增文案键缺失 | 与「关键键」分开查：`mergeDefaults()` 不覆盖老 `messages.yml`，新键（`RECENTLY_ADDED_MESSAGE_KEYS`，目前是 2.11.0 的 `dialogui.*` / `punish.*` / `bot.usage-coords`）缺失时提示手工补键。**必须查磁盘文件**：`Messages#has()` 在 2.11.0 改成只看玩家磁盘上的文件，否则 jar 内置默认文件一带该键就永远返回 true、检查形同虚设 |
+| 失效残留键 | 老配置里若还留着 `clean.yml` 的 `skip-named-items`、`punish.yml` 的 `messages.join-warn-notice` → 提示「已失效、建议删除」 |
+| 扫地 × 垃圾桶冲突 | `to-trashbin: true` 但 `trashbin.enabled: false` = 清扫物直接销毁且不可取回 → 报 [注意] |
+| 权限节点声明 | 代码里 `hasPermission()` 用到的 14 个 `sfpmenu.*` 是否都在 `paper-plugin.yml` 声明（用 `PluginMeta#getPermissions()` 读）→ 缺了报 [错误]（非 OP 玩家会永远没权限） |
+| 假人记录体检 | `bots.yml` 里假人所在世界是否已加载（不加载则下次启动重建一直失败）；`restore-on-start: false` 也提示一次 |
 
 ---
 
@@ -156,14 +202,21 @@ MenuCommand#execute
 
 | 按钮 id | 槽位 | 图标 | 动作 |
 |---|---|---|---|
-| `back` | 19 | ENDER_PEARL | `actback` → 执行 `/back` |
-| `home` | 21 | RED_BED | `acthome` → 打开家列表 |
-| `warp` | 23 | ENDER_EYE | `actwarp` → 打开传送点列表 |
-| `trashbin` | 25 | CAULDRON | `acttrashbin` → 打开垃圾桶 |
-| `dominion` | 29 | GRASS_BLOCK | `cmd:dom`（执行 Dominion 的 `/dom`） |
-| `tpa` | 31 | COMPASS | `acttpa` → 打开「选择传送目标」界面 |
-| `chair` | 33 | OAK_SIGN | 无绑定（**纯说明按钮**，靠 lore 介绍告示牌椅子） |
+| `back` | 10 | ENDER_PEARL | `actback` → 执行 `/back` |
+| `home` | 12 | RED_BED | `acthome` → 打开家列表 |
+| `warp` | 14 | ENDER_EYE | `actwarp` → 打开传送点列表 |
+| `trashbin` | 16 | CAULDRON | `acttrashbin` → 打开垃圾桶 |
+| `rtp` | 19 | SPYGLASS | `actrtp` → 执行 `/rtp` 随机传送（受 `teleport.yml` 的 `rtp.enabled` 控制） |
+| `dominion` | 21 | GRASS_BLOCK | `cmd:dom`（执行 Dominion 的 `/dom`） |
+| `tpa` | 23 | COMPASS | `acttpa` → 打开「选择传送目标」界面 |
+| `chair` | 25 | OAK_SIGN | 无绑定（**纯说明按钮**，靠 lore 介绍告示牌椅子） |
+| `elytra` | 28 | ELYTRA | `actelytra` → 消耗 64 钻石**或** 8 下界残骸兑换鞘翅（见 §1.0） |
 | `ui-toggle` | 34 | BOOK | `acttoggleui` → 切换界面样式（dialogUI / 箱子） |
+
+> **布局（2.11.0 调整）**：5 行的内容行是 1~3（第 0/4 行、第 0/8 列是边框）——
+> 行 1 = back/home/warp/trashbin，行 2 = rtp/dominion/tpa/chair，行 3 = elytra/ui-toggle。
+> 2.10.x 的槽位整体比现在低一行（10~16 空着），已上移一行对齐 `menu.yml` 顶部的示意图。
+> 改槽位时**同步改 `menu.yml` 顶部那张 ASCII 图**，否则图和实际会对不上。
 
 - 绑定关系来自 `menu.yml` 的 `bind.*-button`（默认值就是按钮 id）。
 - 动作分派在 `MenuListener#onInventoryClick`：`cmd:` 前缀 → `closeInventory()` +
@@ -181,13 +234,84 @@ MenuCommand#execute
 两种界面**共用** `MenuManager.activeButtons / resolveAction / runAction / canOpen`，
 因此按钮内容与点击结果完全一致；`MenuListener` 已经薄化成「关界面 → `runAction`」。
 
+- **说明性按钮（没绑动作、只有 lore 的，如 `chair`）在两种界面里都会出现**：
+  箱子 UI 里它占一个格、点了没反应；dialogUI 里给 `customClick` 挂一个空回调，效果一致
+  （2.11.0 修：此前 `activeButtons` 会把它滤掉，导致 dialogUI 少一个按钮）。
+- **打开权限的提示文案优先取 `menu.yml` 的 `permission-message`**（MiniMessage，留空则回退
+  `messages.yml` 的 `common.no-permission`）—— 这个键在 2.11.0 之前没有任何调用点。
+
 **列表类界面也已 dialogUI 化**（1.3/1.4/1.5）：
 - `ui/DialogTeleportList` —— 家列表 / 传送点列表共用的弹窗版（一页 6 条 + 上一页/返回/下一页翻页，翻页重开弹窗），点击条目传送
 - `ui/DialogTpaTarget` —— 在线玩家选择弹窗版，点击发起 `/tpa`
 - 二者与箱子 UI 一样按偏好分流（`MenuManager.openHomeList / openWarpList / openTpaTarget`）
+- **`/home`、`/warp` 无参也走同一套分流**（2.11.0 修：此前命令入口固定开箱子界面，
+  玩家偏好 dialogUI 时点命令反而看到箱子）
 - **dialogUI 按钮无左右键**，列表只保留「点击 = 传送 / 发起 tpa」主动作；删除用 `/delhome /delwarp`、`tpahere` 用 `/tpahere`（箱子 UI 保留右键）
+- 列表类弹窗的标题/翻页/返回**复用箱子 UI 的键**（`home.title`、`warp.title`、`tpa.gui-title`、
+  `teleport.prev|next`、`common.back-to-menu`），条目与「操作选择框」的文案在 `messages.yml`
+  的 `dialogui.*`（2.11.0 起不再有写死在代码里的中文）
 
 垃圾桶（需要取物品）保持箱子 UI，不做 dialogUI。
+
+### 1.0 鞘翅兑换（`MenuManager#exchangeElytra`）
+
+> 2.10.0 新增。为「鞘翅垄断」问题提供一条官方兑换途径。
+> 2.10.2 起支持「钻石 **或** 下界残骸」二选一，并修掉了提示文案不解析 MiniMessage 的问题。
+
+- **入口**：主菜单的 `elytra` 按钮（slot 28，材质 `ELYTRA`）→ 内部动作 `actelytra`
+  → `MenuManager#exchangeElytra(plugin, player)`。箱子 UI 与 dialogUI 共用这一条路径。
+- **兑换规则**：`menu.yml` 的 `elytra-exchange.diamond-cost`（默认 **64**）个钻石
+  **或** `debris-cost`（默认 **8**）个下界残骸（`ANCIENT_DEBRIS`）→ 得到 1 个鞘翅。
+  **不限次数**、无冷却，也没有独立权限节点（沿用菜单的 `sfpmenu.player`）。
+- **扣除顺序**：**优先扣钻石**，钻石不够再扣残骸。所以两种材料都有但只有钻石够时，
+  扣的只会是钻石，不会两种各扣一点。
+- **流程**（顺序不可颠倒，保证「不够就不扣」）：
+  1. 分别统计存储槽位里的钻石 / 残骸，**都不够**则只发提示 + 失败音效，**不做任何扣除**；
+  2. 够则 `removeItem(...)` 扣除**实际那一种**材料；
+  3. `addItem(ELYTRA)` 给出鞘翅，返回的 `leftover`（背包放不下）用
+     `World#dropItemNaturally` 掉在脚下，避免物品凭空消失；
+  4. 成功提示 + 升级音效。
+- **口径一致性（易踩坑）**：统计用的是 `getStorageContents()` 而非 `getContents()`，
+  因为 Bukkit 的 `removeItem` 本身就只作用于**存储槽位**；若用 `getContents()`，
+  会把副手/盔甲的钻石也数进去，出现「数够了却扣不掉」的错位。
+  `PlayerInventory` 并未覆写 `getContents()`，副手属于 `getExtraContents()`，两者口径确实不同。
+- **配置键**：`menu.yml` 的 `elytra-exchange.diamond-cost` / `debris-cost`（均 ≥0，填 0 = 不接受该材料）；
+  `bind.elytra-button`（默认 `"elytra"`）。两者的**兼容读法**：仍会读旧的单个 `cost` 键当钻石数。
+  **两个都配 0 会让按钮点了只提示「不可用」**，`/sfp test` 会专门报这一条。
+- **文案**：`messages.yml` 的 `menu.elytra-success` / `menu.elytra-not-enough` /
+  `menu.elytra-misconfigured`
+  （新文案占位符：`{cost_need}` / `{cost_text}` / `{diamond}` / `{debris}` /
+  `{diamond_have}` / `{debris_have}`；旧文案兼容别名 `{have}` / `{cost}`，见下方提示块）。
+- **改价注意**：按钮的 lore 是**写死的文案**（`menu.yml` 的 `buttons.elytra.lore`），
+  改价格时务必同步改 lore，否则界面显示与实际扣费不一致。
+  `/sfp test` 会在 lore 数字与配置不一致时给出提示。
+
+> **同类漂移统一由自检兜底（2.11.0）**：`SelfTest#checkElytraExchange` 查鞘翅 lore 的数字，
+> `SelfTest#checkLoreDrift` 另查两处 —— 随机传送按钮 lore 的冷却 vs `rtp.cooldown-seconds`、
+> 椅子说明按钮 lore 的关键字 vs `chair.yml` 的 `sign.left/right-keyword`。
+> 菜单钟 lore 里的「泥土」无法自动比对（代码里没有 Material→中文的映射表），改动时要手工同步。
+
+> **2.10.2 修复的坑（务必留意）**：
+> 提示文案**必须**用 `Messages#send(...)` 或 `Messages.deserialize(Messages.apply(...))` 发送，
+> **不能**把 `Messages.apply(...)` 的返回值（一个 `String`）直接丢给
+> `Player#sendMessage(String)` —— **Paper 的 `sendMessage(String)` 不会解析 MiniMessage**，
+> 它只认传统 `§` 色码，于是 `<green>…</green>` 会被原样打印成字面量。
+> 本项目里 `Messages#send(...)` 内部正是 `deserialize(apply(...))`，是发送玩家文案的标准做法。
+
+> **占位符向后兼容（2.10.2）**：`mergeDefaults()` **只补缺失键、不覆盖已存在的键**。
+> 因此从 2.10.0/2.10.1 升上来的服，线上 `messages.yml` 里**已经存在**的
+> `menu.elytra-success` / `menu.elytra-not-enough` **不会被刷新成新文案**，
+> 它们里面的旧占位符会继续生效。为此代码侧保留了两个兼容别名：
+> - `{have}` —— 2.10.0 旧文案用的「钻石持有量」，仍会替换（不会显示成字面量）；
+> - `{cost}` —— **纯数字**的本次扣除量（所以旧文案「已消耗 {cost} 个钻石」仍能正确显示）。
+>
+> 新文案请用：`{cost_need}`（本次要求，如「64 个钻石 或 8 个下界残骸」）、
+> `{cost_text}`（实际扣除的材料描述）、`{diamond}`/`{debris}`（各自所需）、
+> `{diamond_have}`/`{debris_have}`（各自持有）。
+>
+> `/sfp test` 的 `checkElytraPlaceholders` 会扫描 `menu.elytra-*` 文案里出现的占位符，
+> 与代码实际支持的名单比对，发现「代码不会替换的占位符」时给出提示 ——
+> 这类问题编译期与运行期都发现不了，只有真人点一次按钮才看得到。
 
 ### 1.1 菜单钟（`menu/MenuClockManager` + `menu/MenuClockListener`）
 
@@ -244,9 +368,14 @@ MenuCommand#execute
 - **每步（0.5 秒）**：向玩家发一条 **ActionBar 倒计时** —— 文案取 `messages.yml` 的
   `teleport.actionbar`（默认 `<yellow>剩余 <white>{time}</white> 秒</yellow>`），
   `{time}` 为剩余秒数（精确到 0.5，如「2.5」，整数则省去小数位，由 `formatSeconds` 处理）。
-- **每秒**（步长累计到整秒）：脚下刷 PORTAL 粒子（`particle-interval-ticks` 控制频率）
-  + 播放 `teleport.sounds.tick`（BLOCK_NOTE_BLOCK_HAT）。
-- **最后 1 秒**：异步 `getChunkAtAsync` 预加载目标那**一个**区块（不加 ticket，传完自然卸载）。
+- **每分钟粒子的间隔由 `teleport.particle-interval-ticks` 决定**（默认 20 tick = 每秒一次）：
+  步长累加到该值就刷一次脚下 PORTAL 粒子，然后清零（2.11.0 修：此前间隔写死 `% 20 == 0`，
+  配置键读进来却从没用过）。
+- **滴答音效固定每秒一次**（`teleport.sounds.tick`，BLOCK_NOTE_BLOCK_HAT），与粒子间隔解耦：
+  把粒子间隔调成 40 只会让粒子变稀，音效不会跟着变。
+- **距传送还有 1 秒时**（`PRELOAD_LEAD_TICKS = 20`）异步 `getChunkAtAsync` 预加载目标那**一个**
+  区块（不加 ticket，传完自然卸载），只发一次。2.11.0 修：此前这个调用被放在「延迟结束时」
+  的分支里，与 `executeTeleport` 同一次 tick 执行 —— 请求刚发出就传送，等于没有预加载。
 - 到点：二次校验世界仍存在 → executeTeleport；并清空 ActionBar（`sendActionBar(empty)`）。
 - 被取消时（`cancelPending`）同样清空 ActionBar，避免倒计时残留在屏幕上。
 
@@ -255,6 +384,8 @@ MenuCommand#execute
 - 玩家**受到任何伤害**（`EntityDamageEvent` → `cancelOnDamage`，提示区别于移动打断）
 - 任何**非本插件**发起的传送（`PlayerTeleportEvent` 且 cause≠PLUGIN 或不在内部标记窗口内）
 - 玩家退出、插件卸载时取消全部等待任务
+- 玩家退出时还会 `clearTransientState()`：只清「1 秒内部传送标记」这个一次性状态；
+  **刻意不清冷却** —— 冷却存的是结束时间戳，清了就等于「重登绕过冷却」
 
 **冷却**：`getCooldownRemaining() / applyTeleportCooldown()` 由**调用方**决定是否使用。
 `/back` 不检查也不施加冷却；home/warp/tpa 各自有冷却（共用 `teleportCooldowns` 这一张表），
@@ -333,7 +464,7 @@ MenuCommand#execute
 
 | 分支 | 流程 |
 |---|---|
-| `home` 无参 | `HomeListGui.open(...)` 打开家列表 |
+| `home` 无参 | `MenuManager.openHomeList(...)` 按玩家偏好分流：dialogUI → `DialogTeleportList`，箱子 → `HomeListGui`（与菜单「我的家」按钮同一入口） |
 | `home <名>` | 取名 → 不存在提示 → `worldExists()` → 冷却(`home.teleport-cooldown-seconds`) → `teleport()` → 施加冷却 + 提示 |
 | `sethome [名]` | 设置冷却(`set-cooldown-seconds`) → 名字校验（`util/NameUtil`：**中文**/字母/数字/下划线，1~16）→ **若是新家**校验上限（`max-homes`，`sfpmenu.home.bypass-limit` 可绕）→ `HomeStore#save` → 施加设置冷却 + 提示 |
 | `delhome <名>` | `HomeStore#delete`，返回 false 说明不存在 |
@@ -350,6 +481,7 @@ MenuCommand#execute
   （teleport.yml 可配置；留空表示人人可用）。
 - 传送流程：存在 → `worldExists()` → 冷却(`warp.teleport-cooldown-seconds`) → `teleport()`。
 - 传送点全服共享，`warps` 表主键是 `warp_name`。
+- `warp` **无参**同样是 `MenuManager.openWarpList(...)` 按偏好分流（与 home 一致）。
 
 ### 2.6 `/tpa` `/tpahere` `/tpaccept` `/tpdeny` `/tpaui`（`TpaManager` + `TpaCommand`）
 
@@ -439,13 +571,15 @@ request(from, target, type)
 遍历 Bukkit.getWorlds()
   ├─ config.isWorldIncluded(名)：黑名单优先，白名单非空则只扫白名单内的世界
   ├─ 遍历世界内实体，只处理 Item（掉落物）
-  │    ├─ skip-named-items 且物品有自定义显示名 → 跳过（不收集，但实体照样 remove）
-  │    └─ 否则收进 collected
-  │    └─ entity.remove()
+  │    └─ type 非 air 就收进 collected，然后 entity.remove()
   └─ to-trashbin && 垃圾桶可用 → trashBinManager.clear()（清掉上一轮）+ addAll(collected) + save()
                                   否则收集物直接丢弃（不可恢复）
 → 控制台日志 + broadcast.result 为 true 时广播 clean.result（带 [打开垃圾桶] 可点击按钮）
 ```
+
+> **2.11.0 取消了 `skip-named-items`**：此前「有自定义显示名的物品」会被跳过（留在地上），
+> 与文档写的「不收集但实体照样 remove」不一致。现在改名物品与普通掉落物**完全同待遇** ——
+> 一样被清除，是否可取回只由 `to-trashbin` 决定。
 
 - 周期由 `clean.yml` 的 `cycle-seconds` 决定，**代码强制最低 60 秒**。
 - PAPI 占位符：`CleanTimePlaceholder`（identifier `stf`）暴露
@@ -519,6 +653,10 @@ isChairBlock(block) → getChairFacingYaw(block) != null
 
 另外 `onPlayerKick` 会**取消**「flying / 飞行 / moving too fast / 移动过快」这几种踢出，
 避免原版反作弊把坐在盔甲架上的玩家误踢。
+
+**插件卸载（`SfpMain#onDisable` → `ChairManager#shutdown`）**：把所有还在座上的玩家扶起来、
+移除盔甲架、清空两张表。2.11.0 补：此前没有这一步，玩家坐着时重载/禁用插件会留下
+**孤儿盔甲架**（映射随实例丢弃，实体再也回收不掉，只能重启服务端）。
 
 ---
 
@@ -653,7 +791,30 @@ punishment_logs    log_id(AUTOINCREMENT) / punishment_id / player_uuid / player_
   + `migrate(from)` 追加 `if (from < N)`），当前 v1。
 - 数据库不可用时静默降级：命令统一回「该功能当前未启用」，不抛异常。
 
-### 8.3 惰性到期判定（核心设计）
+### 8.3 数据库位置（可自定义 / 可接入现有库）
+
+`punish.yml` 的 `database.file` 支持三种写法，由 `PunishDatabase#resolveDbFile` 解析：
+
+| 写法 | 示例 | 解析结果 |
+|---|---|---|
+| 文件名 | `punish.db` | `plugins/SFP-main/punish.db`（默认，与旧行为一致） |
+| 相对路径 | `data/punish.db` | `plugins/SFP-main/data/punish.db` |
+| 绝对路径 | `D:/mc/shared/punish.db` | 直接用该文件 |
+
+- **绝对路径**用于把数据放到插件目录之外（挂载盘、跨服共享目录），或接入现成的处罚库。
+- **父目录不存在会自动 `mkdirs()`**，避免 SQLite 报 `path to database does not exist`。
+- 配置值为空 / 纯空白时回落到 `punish.db`（`trim()` 后判空）。
+- **接入已有库的前提是表结构兼容**（需要 `players` / `punishments` / `punishment_logs` 三张表，
+  可用 `/sfp test` 校验）。若 `PRAGMA user_version` 高于本插件版本，`initSchema()` 只记一条
+  warning、**不做任何结构变更**，不会破坏原库。别家插件（LiteBans / AdvancedBan）表结构不同，
+  无法直接读取，需先用外部工具转换。
+- 启动日志与 `/sfp test` 都会打印**数据库的绝对路径**，便于确认接的是哪个库。
+- **群组服共用同一个处罚库**：各子服把 `database.file` 指向同一绝对路径（如挂载盘位置），
+  配合 `config.yml` 的 `mode: punish-only`（见 §0.0）即可让子服只跑处罚、不跑菜单与传送。
+  ⚠ SQLite 在**跨机共享**（NFS/SMB）下并发写有损坏风险，多服同库建议放在**同一台机器**的
+  共享目录；跨机场景请改用支持并发的数据库方案。
+
+### 8.4 惰性到期判定（核心设计）
 
 **不轮询、不定时扫描**。`expire_at` 只在下面这些「必要时机」被检查，
 过期即删除生效记录 + 补一条 `EXPIRE` 历史日志：
@@ -672,7 +833,7 @@ punishment_logs    log_id(AUTOINCREMENT) / punishment_id / player_uuid / player_
 
 > 库始终是唯一真相来源，缓存只是让异步判定安全的副本。
 
-### 8.4 文案（punish.yml）
+### 8.5 文案（punish.yml）
 
 **本模块全部面向玩家的文案都放 `punish.yml`**（不回退 messages.yml）——
 「自定义踢人 / 封禁消息」是核心诉求，集中一处最好改。可用占位符：
@@ -684,15 +845,52 @@ punishment_logs    log_id(AUTOINCREMENT) / punishment_id / player_uuid / player_
 | `messages.kick-screen-ban` | 被封禁者登录时的整屏文字（踢下线） |
 | `messages.kick-screen-kick` | 被 `/sfpkick` 踢出时的整屏文字 |
 | `messages.mute-notice` | 被禁言者发言时收到的提示 |
-| `messages.join-warn-notice` | 进服时的处罚提醒 |
+| `sounds.punish` / `sounds.revoke` | 执行处罚 / 解除时**给执行者**播放的音效（2.11.0 起真正生效；控制台执行时跳过） |
 | `broadcast.enabled` / `broadcast.format` | 执行封禁/禁言时是否全服公告、公告格式 |
+| `kick-delay-ticks` | 踢出前的延迟 tick 数（默认 1；跨服环境必须 ≥1，见 §8.7） |
 
-`messages.yml` 里的 `punish.*` 是命令执行后的**简短反馈**（已 / 已警告 XX，编号 YYY）。
+`messages.yml` 里的 `punish.*` 是命令执行后的**简短反馈**（已 / 已警告 XX，编号 YYY）——
+2.11.0 起**所有**反馈都在这里，包括用法提示、时间格式错误、查不到玩家、`/sfpcheck` 的表头表尾
+与单条历史记录行（`punish.log-line`）；`PunishCommand` 里不再有硬编码中文。
 
-### 8.5 处罚 ID
+> `messages.join-warn-notice`（进服提示「有未读处罚记录」）**已在 2.11.0 删除**：
+> 警告（WARN）按设计不写生效表、也没有「已读」状态，无法判定「未读」，该键从来没有调用点。
+> `PunishConfig` 里的 `getJoinWarnNotice()` / `joinWarnNotice(Map)` 一并移除。
+
+### 8.6 处罚 ID
 
 6 位**字母数字混合**（字符集去掉了易混淆的 `0/O/1/I/l`），生成时用 `PunishStore#idExists` 查重，
 碰撞则重试（`SecureRandom`）。
+
+### 8.7 踢出时机与跨服代理（2.10.1 修复）
+
+**所有踢人动作一律延后 `punish.yml` 的 `kick-delay-ticks`（默认 1）个 tick 再真正断开**，
+不允许在事件里立刻 `kick()`。涉及三处：`PunishListener#scheduleBanKick`（进服拦截封禁）、
+`PunishManager#apply`（封禁在线玩家）、`PunishManager#kick`（`/sfpkick`）。
+
+**为什么需要延迟**（跨服环境的必踩坑）：
+
+1. 玩家通过 Velocity 连接子服时，在「登录 / 配置阶段」尚未站稳；
+2. 此时若子服直接把玩家踢掉，Velocity 的 `KickedFromServerEvent` 会判定
+   `kickedDuringServerConnect() == true`，**把这次踢出当成一次连接中断**，
+   转而把玩家按 `velocity.toml` 的 `try` 列表**重投到下一个子服**
+   （典型链路：`vanilla` 封禁踢出 → 代理转投 `lobby` → `lobby` 又踢 → 循环）；
+3. 客户端**还没收到** `ClientboundGameEventPacket` 的 `LEVEL_CHUNKS_LOAD_START` 包，
+   于是加载界面卡在「**加载地形中**」不动；
+4. 而服务端侧此时连接已经关闭，日志显示「玩家已断开」——
+   于是表现为「**玩家卡在加载地形中，服务端却显示已断开连接**」，且玩家看不到踢出原因。
+
+**延迟一 tick 的作用**：让本次登录先在子服内部走完，Velocity 便把它当作一次
+**正常踢出**，直接断开玩家并展示 `kick-screen-ban`，「加载地形中」页随即被踢出原因覆盖。
+单机（无代理）环境下 1 tick 与「立即踢」在观感上无差别，因此默认值就是 1。
+
+> **诊断依据**：Velocity `KickedFromServerEvent` 的 `kickedDuringServerConnect()` 语义、
+> `RedirectPlayer` 结果类型，以及 `try` 列表「既用于初次连接、也用于被踢后的重投」这一官方说明。
+> ViaVersion 侧同源问题（#3630 / #3695）根因一致：区块加载包与 join/respawn 捆绑发送，
+> 客户端重进配置阶段时该捆绑会失效，这就是「加载地形中」卡住的由来。
+>
+> 与 `failover-on-unexpected-server-disconnect` 无关 —— 该开关只管「非预期断连」，
+> **插件主动 kick 不受其影响**，所以不能靠代理配置绕开，必须在插件侧调整踢出时机。
 
 ---
 
@@ -770,6 +968,7 @@ SQLite 的 `ALTER TABLE` 限制：只能加列 / 改列名 / 删列（3.35+）�
    若要内部动作，才需要动 `MenuHolder`（加常量）+ `MenuManager`（`resolveAction` /
    `isFeatureEnabled`）+ `MenuListener`（分派）。`command:` 留空且不在 `bind.*` 里 = 点了没反应
    （`/sfp test` 会报出来；有 lore 的纯说明按钮会被识别为「仅作说明展示」）。
+   改槽位别忘了同步 `menu.yml` 顶部那张 ASCII 布局图。
 5. **子界面导航行布局改动要同步两处**：`TrashBinHolder` 与 `TeleportListHolder` /
    `TpaTargetHolder` 各有一份 `SLOT_*` 常量。
 6. **开关类改动（enabled）无法热重载**：监听器注册不可逆，必须重启服务器；
@@ -797,6 +996,20 @@ SQLite 的 `ALTER TABLE` 限制：只能加列 / 改列名 / 删列（3.35+）�
 | `trashbin.global` | 无引用；按玩家隔离未实现 |
 | `config.yml` 的 `currency-name` | `GlobalConfig#getCurrencyName()` 无调用点，扫地广播的 `{currency}` 占位符也是死代码 |
 
+**2.11.0 又清掉两个**（同样是「配置键 + 访问器」一起删）：
+
+| 配置项 | 原状态 |
+|---|---|
+| `clean.skip-named-items` | 想表达「改名物品别扫」，但语义与文档相反（实际是留在地上），见 §3 |
+| `punish.messages.join-warn-notice` | 毫无调用点，且 WARN 不写生效表、无「已读」状态，无法判定「未读」，见 §8.5 |
+
+另有 2 个键是「写了但没接上」，**2.11.0 修好而不是删掉**：
+
+| 配置项 | 原状态 → 现状 |
+|---|---|
+| `teleport.particle-interval-ticks` | 读进来后从未使用（间隔写死 20 tick）→ 现在真正控制粒子间隔 |
+| `menu.yml` 的 `permission-message` | `MenuConfig#getPermissionMessage()` 无调用点 → 现在是无权限时的提示文案（留空回退 `common.no-permission`） |
+
 ## 12. 新增功能检查清单
 
 - [ ] `resources/` 加 `xxx.yml`（首字段 `enabled`，注释写清每个键）
@@ -815,4 +1028,6 @@ SQLite 的 `ALTER TABLE` 限制：只能加列 / 改列名 / 删列（3.35+）�
 - [ ] 若绑定菜单按钮：`menu.yml` 加按钮 + `bind.*-button`，并按第 4 条改三个类
 - [ ] **把本功能写进 features.md**（入口 / 调用链 / 流程 / 配置键 / 权限 / 数据文件）
 - [ ] 构建 + 真机冒烟（`/sfp test` 应全绿；GUI 与交互需真人验证）
+- [ ] **按钮 lore 里若写死了其它配置的数值**（冷却、材料数量、关键字），把比对规则加进
+      `SelfTest#checkLoreDrift` / `#checkElytraExchange` —— 否则改配置后按钮上的说明会悄悄过期
 - [ ] 版本号：Bug 修复 `z+1`、小内容更新 `y+1`，没有大更新不要动 `x`

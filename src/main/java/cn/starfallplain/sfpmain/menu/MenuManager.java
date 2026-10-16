@@ -15,6 +15,7 @@ import cn.starfallplain.sfpmain.ui.DialogTeleportList;
 import cn.starfallplain.sfpmain.ui.DialogTpaTarget;
 import cn.starfallplain.sfpmain.ui.UiMode;
 import cn.starfallplain.sfpmain.ui.UiPreferenceStore;
+import cn.starfallplain.sfpmain.util.SoundUtil;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -69,7 +70,13 @@ public class MenuManager {
         MenuConfig menuConfig = plugin.getConfigManager().menu();
         String permission = menuConfig.getOpenPermission();
         if (permission != null && !permission.isBlank() && !player.hasPermission(permission)) {
-            player.sendMessage(plugin.getMessage("common.no-permission", "<red>你没有权限使用此命令！</red>"));
+            // 提示文案优先用 menu.yml 的 permission-message；留空则回退 messages.yml
+            String message = menuConfig.getPermissionMessage();
+            if (message == null || message.isBlank()) {
+                player.sendMessage(plugin.getMessage("common.no-permission", "<red>你没有权限使用此命令！</red>"));
+            } else {
+                player.sendMessage(Messages.deserialize(message));
+            }
             return false;
         }
         if (!menuConfig.isEnabled()) {
@@ -122,12 +129,20 @@ public class MenuManager {
         if (button.getId().equals(menuConfig.getWarpButtonId())) return MenuHolder.ACTION_WARP;
         if (button.getId().equals(menuConfig.getBackButtonId())) return MenuHolder.ACTION_BACK;
         if (button.getId().equals(menuConfig.getTpaButtonId())) return MenuHolder.ACTION_TPA;
+        if (button.getId().equals(menuConfig.getRtpButtonId())) return MenuHolder.ACTION_RTP;
+        if (button.getId().equals(menuConfig.getElytraButtonId())) return MenuHolder.ACTION_ELYTRA;
         if (button.getId().equals(menuConfig.getUiToggleButtonId())) return MenuHolder.ACTION_TOGGLE_UI;
         if (!button.getCommand().isBlank()) return MenuHolder.CMD_PREFIX + button.getCommand();
         return null;
     }
 
-    /** 返回所有「可见且有动作」的按钮（按 menu.yml 顺序），供 dialogUI 渲染 */
+    /**
+     * 返回所有「可见且槽位合法」的按钮（按 menu.yml 顺序），供 dialogUI 渲染。
+     * <p>
+     * <b>包含没绑动作的说明性按钮</b>（例如介绍告示牌椅子的那个）：箱子 UI 会把它显示出来，
+     * 所以 dialogUI 也必须显示，否则同一份 menu.yml 在两种界面下按钮集合不一致。
+     * 这类按钮点击不做任何事，由 {@link DialogMenu} 挂一个空回调实现。
+     */
     public static List<MenuConfig.Button> activeButtons(MenuConfig menuConfig, ConfigManager cm) {
         List<MenuConfig.Button> result = new ArrayList<>();
         int size = menuConfig.getSize();
@@ -135,7 +150,6 @@ public class MenuManager {
             if (!isFeatureEnabled(button.getId(), menuConfig, cm)) continue;
             if (!button.isVisible()) continue;
             if (button.getSlot() < 0 || button.getSlot() >= size) continue;
-            if (resolveAction(button, menuConfig) == null) continue;
             result.add(button);
         }
         return result;
@@ -161,6 +175,9 @@ public class MenuManager {
             case MenuHolder.ACTION_BACK ->
                     Bukkit.getScheduler().runTask(plugin, () -> player.performCommand("back"));
             case MenuHolder.ACTION_TPA -> openTpaTarget(plugin, player);
+            case MenuHolder.ACTION_RTP ->
+                    Bukkit.getScheduler().runTask(plugin, () -> player.performCommand("rtp"));
+            case MenuHolder.ACTION_ELYTRA -> exchangeElytra(plugin, player);
             case MenuHolder.ACTION_TOGGLE_UI -> toggleUi(plugin, player);
             default -> { /* 未知动作：忽略 */ }
         }
@@ -177,7 +194,13 @@ public class MenuManager {
                 TrashBinCommand.openPage(plugin, player, manager, 0));
     }
 
-    private static void openHomeList(SfpMain plugin, Player player) {
+    /**
+     * 打开家列表（按玩家偏好分流出 dialogUI 或箱子界面）。
+     * <p>
+     * 菜单按钮（{@code acthome}）与 {@code /home} 无参命令**共用这一个入口**，
+     * 保证两个入口在两种界面下表现完全一致。
+     */
+    public static void openHomeList(SfpMain plugin, Player player) {
         TeleportManager manager = plugin.getTeleportManager();
         if (manager == null) {
             player.sendMessage(plugin.getConfigManager().messages().component("common.feature-disabled",
@@ -195,7 +218,11 @@ public class MenuManager {
         });
     }
 
-    private static void openWarpList(SfpMain plugin, Player player) {
+    /**
+     * 打开传送点列表（按玩家偏好分流出 dialogUI 或箱子界面）。
+     * 与 {@link #openHomeList} 同理，供菜单按钮与 {@code /warp} 无参命令共用。
+     */
+    public static void openWarpList(SfpMain plugin, Player player) {
         TeleportManager manager = plugin.getTeleportManager();
         if (manager == null) {
             player.sendMessage(plugin.getConfigManager().messages().component("common.feature-disabled",
@@ -213,7 +240,11 @@ public class MenuManager {
         });
     }
 
-    private static void openTpaTarget(SfpMain plugin, Player player) {
+    /**
+     * 打开「选择传送目标」界面（按玩家偏好分流）。
+     * 供菜单按钮（{@code acttpa}）调用；命令入口是 {@code /tpa <玩家名>}，不需要列表。
+     */
+    public static void openTpaTarget(SfpMain plugin, Player player) {
         if (plugin.getTpaManager() == null) {
             player.sendMessage(plugin.getConfigManager().messages().component("common.feature-disabled",
                     "<red>该功能当前未启用。</red>"));
@@ -249,6 +280,123 @@ public class MenuManager {
                 openMainMenu(plugin, player);
             }
         });
+    }
+
+    /**
+     * 消耗材料兑换一个鞘翅（2.10.2 起支持「钻石 <b>或</b> 下界残骸」二选一）。
+     * <p>
+     * 无论箱子 UI 还是 dialogUI，点击「鞘翅兑换」按钮最终都走到这里，行为一致。
+     * 流程：先判断材料够不够 → 够才扣除 → 给一个鞘翅；背包放不下时掉在脚下，
+     * 避免物品凭空消失。
+     * <p>
+     * 扣除顺序：**优先扣钻石**，钻石不够再扣残骸。因此玩家两种材料都有、
+     * 但只有钻石够时，扣的只会是钻石（不会两种各扣一点）。
+     * <p>
+     * 统计与扣除都只针对**存储槽位**（{@code getStorageContents()}），副手与盔甲槽不计入 ——
+     * 因为 Bukkit 的 {@code removeItem} 本身就只作用于存储槽位，两边口径必须一致，
+     * 否则会出现「数到了副手的钻石、却扣不掉」的错位。
+     */
+    private static void exchangeElytra(SfpMain plugin, Player player) {
+        Messages messages = plugin.getConfigManager().messages();
+        MenuConfig menuConfig = plugin.getConfigManager().menu();
+        int diamondCost = menuConfig.getElytraDiamondCost();
+        int debrisCost = menuConfig.getElytraDebrisCost();
+
+        if (!menuConfig.isElytraExchangeUsable()) {
+            plugin.getLogger().warning("menu.yml 的 elytra-exchange 把钻石与残骸都配成了 0，鞘翅兑换已停用。");
+            messages.send(player, "menu.elytra-misconfigured",
+                    "<red>鞘翅兑换当前不可用，请联系管理员。</red>", Map.of());
+            return;
+        }
+
+        int diamondHave = countMaterial(player, Material.DIAMOND);
+        int debrisHave = debrisCost > 0 ? countMaterial(player, Material.ANCIENT_DEBRIS) : 0;
+
+        // 先判定，不够就直接返回，不做任何扣除
+        boolean payByDiamond = diamondCost > 0 && diamondHave >= diamondCost;
+        boolean payByDebris = !payByDiamond && debrisCost > 0 && debrisHave >= debrisCost;
+        if (!payByDiamond && !payByDebris) {
+            messages.send(player, "menu.elytra-not-enough",
+                    "<red>材料不足，兑换一个鞘翅需要 {cost_need}。</red>",
+                    requirement(diamondCost, debrisCost, diamondHave, debrisHave,
+                            Material.DIAMOND, 0));
+            SoundUtil.play(player, player.getLocation(), "entity.villager.no", 1.0f, 1.0f);
+            return;
+        }
+
+        // 扣除材料（removeItem 会按数量分摊到多个堆叠中）
+        Material payMaterial = payByDiamond ? Material.DIAMOND : Material.ANCIENT_DEBRIS;
+        int payAmount = payByDiamond ? diamondCost : debrisCost;
+        player.getInventory().removeItem(new ItemStack(payMaterial, payAmount));
+
+        // 给出鞘翅；背包满则掉在脚下
+        ItemStack elytra = ItemStack.of(Material.ELYTRA, 1);
+        Map<Integer, ItemStack> leftover = player.getInventory().addItem(elytra);
+        for (ItemStack rest : leftover.values()) {
+            player.getWorld().dropItemNaturally(player.getLocation(), rest);
+        }
+
+        messages.send(player, "menu.elytra-success",
+                "<green>兑换成功！已消耗 {cost_text}，获得 1 个鞘翅。</green>",
+                requirement(diamondCost, debrisCost, diamondHave, debrisHave, payMaterial, payAmount));
+        SoundUtil.play(player, player.getLocation(), "entity.player.levelup", 1.0f, 1.2f);
+    }
+
+    /**
+     * 拼出兑换文案用的占位符表。
+     * <p>
+     * 占位符分三类：
+     * <ul>
+     *   <li>{@code {cost}} —— 本次**实际扣除的数量**（纯数字，兼容旧文案「已消耗 {cost} 个钻石」）</li>
+     *   <li>{@code {cost_text}} —— 实际扣除的材料描述（如「64 个钻石」）</li>
+     *   <li>{@code {cost_need}} —— 本次兑换的**要求**（两种材料都接受时为「A 或 B」）</li>
+     * </ul>
+     * 另有 {diamond}/{debris}（各自所需）、{diamond_have}/{debris_have}（各自持有），
+     * 让「不足」提示能把差多少说清楚。
+     * <p>
+     * 保留旧占位符 {@code {have}}（= 钻石持有量）作为**向后兼容别名**：
+     * 2.10.0/2.10.1 的线上 messages.yml 里 {@code menu.elytra-not-enough} 用的是
+     * {@code {have}}，而 {@code mergeDefaults()} 只补缺失键、不覆盖已存在的键 ——
+     * 升到 2.10.2 后那条旧文案不会被刷新。若不提供该别名，玩家会看到字面量 {@code {have}}。
+     */
+    private static Map<String, String> requirement(int diamondCost, int debrisCost,
+                                                  int diamondHave, int debrisHave,
+                                                  Material payMaterial, int payAmount) {
+        Map<String, String> ph = new LinkedHashMap<>();
+        // {cost} = 本次实际扣除的**数量**（纯数字）。
+        // 保持为纯数字是有意的：2.10.0/2.10.1 的旧文案是「已消耗 {cost} 个钻石」，
+        // 若这里塞「64 个钻石 或 8 个下界残骸」这种短语，会拼成「…个钻石 或 …个残骸 个钻石」。
+        ph.put("cost", String.valueOf(payAmount));
+        // {cost_text} = 带材料名的完整描述，供新文案使用
+        ph.put("cost_text", payMaterial == Material.DIAMOND
+                ? payAmount + " 个钻石"
+                : payAmount + " 个下界残骸");
+        // {cost_need} = 本次兑换的**要求**（两种材料都接受时说明「A 或 B」）
+        if (diamondCost > 0 && debrisCost > 0) {
+            ph.put("cost_need", diamondCost + " 个钻石 或 " + debrisCost + " 个下界残骸");
+        } else if (diamondCost > 0) {
+            ph.put("cost_need", diamondCost + " 个钻石");
+        } else {
+            ph.put("cost_need", debrisCost + " 个下界残骸");
+        }
+        ph.put("diamond", String.valueOf(diamondCost));
+        ph.put("debris", String.valueOf(debrisCost));
+        ph.put("diamond_have", String.valueOf(diamondHave));
+        ph.put("debris_have", String.valueOf(debrisHave));
+        // 兼容 2.10.0/2.10.1 的旧文案：老 messages.yml 里的 {have} 指「钻石持有量」
+        ph.put("have", String.valueOf(diamondHave));
+        return ph;
+    }
+
+    /** 统计玩家**存储槽位**里某种材质的总数量（与 removeItem 的口径一致，不含副手/盔甲） */
+    private static int countMaterial(Player player, Material material) {
+        int total = 0;
+        for (ItemStack item : player.getInventory().getStorageContents()) {
+            if (item != null && item.getType() == material) {
+                total += item.getAmount();
+            }
+        }
+        return total;
     }
 
     public static Inventory createMainMenu(SfpMain plugin, Player player) {
@@ -295,6 +443,7 @@ public class MenuManager {
         if (buttonId.equals(menuConfig.getWarpButtonId())) return cm.teleport().isEnabled() && cm.teleport().isWarpEnabled();
         if (buttonId.equals(menuConfig.getBackButtonId())) return cm.teleport().isEnabled() && cm.teleport().isBackEnabled();
         if (buttonId.equals(menuConfig.getTpaButtonId())) return cm.teleport().isEnabled() && cm.teleport().isTpaEnabled();
+        if (buttonId.equals(menuConfig.getRtpButtonId())) return cm.teleport().isEnabled() && cm.teleport().isRtpEnabled();
         return true;
     }
 

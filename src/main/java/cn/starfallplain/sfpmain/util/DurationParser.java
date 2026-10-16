@@ -7,7 +7,8 @@ import java.util.Locale;
  * 解析成毫秒数，并支持 {@code perm} / {@code permanent}（永久）。
  * <p>
  * 支持的字段：{@code w}（周）{@code d}（天）{@code h}（时）{@code m}（分）{@code s}（秒）。
- * 单位可组合、可不按顺序（{@code 30m1h} 也接受），重复单位取最后一次出现。
+ * 单位可组合、可不按顺序（{@code 30m1h} 也接受）；**同一单位重复出现会累加**
+ * （{@code 1h1h} = 2 小时），并不是「取最后一次」。
  */
 public final class DurationParser {
 

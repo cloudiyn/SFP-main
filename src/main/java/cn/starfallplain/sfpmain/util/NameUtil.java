@@ -24,9 +24,4 @@ public final class NameUtil {
     public static boolean isValidName(String name) {
         return name != null && NAME_PATTERN.matcher(name).matches();
     }
-
-    /** 规则说明，供提示文案使用 */
-    public static String ruleText() {
-        return "中文、字母、数字、下划线，长度 1~16";
-    }
 }

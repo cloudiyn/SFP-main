@@ -141,9 +141,11 @@ tpa:
   dialog-deny: "<!i><red>拒绝</red>"
   dialog-accept-hover: "<!i><gray>同意这次传送</gray>"
   dialog-deny-hover: "<!i><gray>拒绝这次传送</gray>"
-  # 聊天 TUI（同一条消息里的按钮 + 手动输入提示）
-  tui-accept: "<!i><click:run_command:'/tpaccept {from}'><green>[接受]</green></click>"
-  tui-deny: "<!i><click:run_command:'/tpdeny {from}'><red>[拒绝]</red></click>"
+  # 聊天 TUI（同一条消息里的按钮）
+  # 注意：点击命令由代码挂载（TpaManager#sendChatUi），**不要**在这里再写 <click:...>，
+  # 否则会出现「配置里的命令模板」与「代码挂的命令」两份，容易误以为占位符没被替换。
+  tui-accept: "<!i><green>[接受]</green>"
+  tui-deny: "<!i><red>[拒绝]</red>"
   # 回应界面里的「切换界面形式」按钮（偏好存 settings.db，切换后立即用新形式重发当前请求）
   dialog-switch: "<!i><yellow>切换界面</yellow>"
   dialog-switch-hover: "<!i><gray>改用聊天里的按钮来回应</gray>"
@@ -200,6 +202,8 @@ bot:
   create-failed: "<red>创建假人失败：{error}</red>"
   world-not-found: "<red>找不到世界「{world}」。</red>"
   bad-coords: "<red>坐标格式不正确，应为数字。</red>"
+  # 只给了世界或坐标的一部分时（既不是「只有名字」也不是「名字 + 世界 + x y z」）
+  usage-coords: "<red>坐标要么不写，要么写全：/bot create <名字> <世界> <x> <y> <z></red>"
   need-coords: "<red>控制台执行时必须给出坐标：/bot create <名字> <世界> <x> <y> <z></red>"
   list-header: "<aqua>假人（{count}）：</aqua>"
   list-empty: "<yellow>当前没有假人。</yellow>"
@@ -215,10 +219,43 @@ menuui:
 # ---------- 菜单（menu 包）----------
 menu:
   head-name: "<!i><yellow>{player}</yellow>"
+  # 鞘翅兑换（2.10.2：支持「钻石 或 下界残骸」二选一）
+  # {cost_need} 本次兑换的要求（如「64 个钻石 或 8 个下界残骸」）
+  # {cost_text} 本次实际扣除的材料描述（如「64 个钻石」）
+  # {diamond} {debris} 各自所需数量；{diamond_have} {debris_have} 玩家各自持有量
+  elytra-success: "<green>兑换成功！已消耗 <white>{cost_text}</white><green>，获得 1 个鞘翅。</green>"
+  elytra-not-enough: "<red>材料不足：兑换一个鞘翅需要 </red><white>{cost_need}</white><red>。</red> <gray>（钻石 </gray><white>{diamond_have}</white><gray>/</gray><white>{diamond}</white><gray>，残骸 </gray><white>{debris_have}</white><gray>/</gray><white>{debris}</white><gray>）</gray>"
+  # 管理员把两种材料都配成 0 时点按钮的提示
+  elytra-misconfigured: "<red>鞘翅兑换当前不可用，请联系管理员。</red>"
+
+# ---------- dialogUI（Paper 弹窗界面）----------
+# 主菜单弹窗的按钮文案取自 menu.yml 的 buttons.*；这里放列表类弹窗（家 / 传送点 / 选人）的文案。
+# 列表标题复用 home.title / warp.title / tpa.gui-title（含 {page} {pages} 占位符），
+# 翻页按钮复用 teleport.prev / next / first / last，返回按钮复用 common.back-to-menu。
+dialogui:
+  # 条目的显示名与悬浮提示
+  entry-name: "<white>{name}</white>"
+  entry-hover-location: "<gray>{location}</gray>"
+  # 家列表：点条目后弹出的「传送 / 删除」选择框
+  home-action-title: "<!i><aqua>我的家</aqua>"
+  home-action-body: "<!i><yellow>{name}</yellow> <gray>—— 选择操作</gray>"
+  home-teleport: "<!i><green>传送</green>"
+  home-teleport-hover: "<!i><gray>传送到这个家</gray>"
+  home-delete: "<!i><red>删除这个家</red>"
+  home-delete-hover: "<!i><gray>等同 /delhome {name}</gray>"
+  # 选择传送目标：点玩家后弹出的「传送方向」选择框
+  tpa-entry-hover: "<gray>{world}</gray>"
+  tpa-direction-title: "<!i><aqua>玩家传送</aqua>"
+  tpa-direction-body: "<!i><yellow>{name}</yellow> <gray>—— 选择传送方向</gray>"
+  tpa-to: "<!i><green>传送到他身边</green>"
+  tpa-to-hover: "<!i><gray>等同 /tpa {name}</gray>"
+  tpa-here: "<!i><aqua>让他传送到你身边</aqua>"
+  tpa-here-hover: "<!i><gray>等同 /tpahere {name}</gray>"
 
 # ---------- 处罚系统（punish 包）----------
 # 说明：踢下线整屏 / 禁言提示 / 全服广播等「需要高度自定义」的文案在 punish.yml；
-#       这里的都是命令执行后的简短反馈。可用占位符：{player} {operator} {reason} {id} {type} {duration}
+#       这里的都是命令执行后的简短反馈。可用占位符：
+#       {player} {operator} {reason} {id} {type} {duration} {keyword} {count} {time} {name} {action}
 punish:
   warn-received: "<red>你收到了一个警告。</red> <gray>原因：</gray><white>{reason}</white>"
   warn-applied: "<green>已警告 </green><white>{player}</white><green>，编号 </green><yellow>{id}</yellow>"
@@ -227,4 +264,31 @@ punish:
   mute-applied: "<green>已禁言 </green><white>{player}</white><green>（</green><white>{duration}</white><green>），编号 </green><yellow>{id}</yellow>"
   unban-applied: "<green>已解封 </green><white>{player}</white><green>，编号 </green><yellow>{id}</yellow>"
   unmute-applied: "<green>已解除禁言 </green><white>{player}</white><green>，编号 </green><yellow>{id}</yellow>"
+  # 用法（参数不全时）
+  usage-check: "<red>用法：/sfpcheck <处罚ID 或 玩家名></red>"
+  usage-warn: "<red>用法：/sfpwarn <在线玩家> <原因></red>"
+  usage-kick: "<red>用法：/sfpkick <在线玩家> <原因></red>"
+  usage-ban: "<red>用法：/sfpban <玩家> <时间> <原因></red>"
+  usage-mute: "<red>用法：/sfpmute <玩家> <时间> <原因></red>"
+  usage-unban: "<red>用法：/sfpunban <玩家名></red>"
+  usage-unmute: "<red>用法：/sfpunmute <玩家名></red>"
+  # 时间写法提示（跟在 ban / mute 用法后面）；{time} 为无法识别的那段输入
+  time-format-tip: "<dark_gray>时间示例：7d（7天）、12h、1d2h30m、30m、perm（永久）</dark_gray>"
+  bad-time: "<red>时间格式无法识别：</red><white>{time}</white><dark_gray>（示例：7d / 12h / 1d2h30m / perm）</dark_gray>"
+  # 解封 / 解禁：目标取自数据库当前名单
+  revoke-tip: "<dark_gray>目标来自数据库当前名单，输入时会自动补全。</dark_gray>"
+  not-banned: "<yellow>{player} 当前没有被封禁。</yellow>"
+  not-muted: "<yellow>{player} 当前没有被禁言。</yellow>"
+  # 目标解析失败
+  offline: "<red>玩家 </red><white>{player}</white><red> 不在线。</red>"
+  unknown-player: "<red>找不到玩家 </red><white>{player}</white><red>（需该玩家至少进过一次服务器）。</red>"
+  # 查询结果
+  no-record: "<gray>没有找到与 </gray><white>{keyword}</white><gray> 相关的处罚记录。</gray>"
+  no-active-punishment: "<green>该玩家当前状态：无处罚。</green>"
+  check-header: "<dark_gray>========== 处罚记录：</dark_gray><white>{keyword}</white><dark_gray> ==========</dark_gray>"
+  check-footer: "<dark_gray>共 {count} 条记录。</dark_gray>"
+  check-active-none: "<gray>当前生效处罚：</gray><green>无处罚</green>"
+  check-active-entry: "<gray>当前生效处罚：</gray><red>{type}</red><gray> </gray><white>{duration}</white><gray>（编号 </gray><yellow>{id}</yellow><gray>）</gray>"
+  # 单条历史记录：{time} 处罚时间 {type} 类型 {action} 动作 {id} 编号 {operator} 操作者 {reason} 原因
+  log-line: "<dark_gray>[{time}]</dark_gray> <white>{type}</white> <gray>{action}</gray> <dark_gray>编号</dark_gray><yellow>{id}</yellow> <dark_gray>· 操作者</dark_gray><white>{operator}</white> <dark_gray>· 原因</dark_gray><white>{reason}</white>"
 

@@ -83,16 +83,24 @@ public final class SfpMain extends JavaPlugin {
         boolean papiOk = Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null;
 
         // 2) 按开关装配各功能模块（垃圾桶须先于扫地创建；传送须先于命令注册）
-        setupTrashBin();
-        setupFloorClean();
-        setupChair();
-        setupTeleport();
-        setupBot();
-        setupUiPreferences();
-        setupMenu();
-        setupMenuClock();
-        setupTab();
-        setupScoreboard();
+        //
+        //    punish-only（仅处罚）模式下，群组服的处罚子服只跑处罚系统 + /sfp，
+        //    其余模块一律不装配：不建数据库、不注册监听器、不生成实体，
+        //    这样既避免与主服重复加载，也防止权限与 UI 互相干扰。
+        if (configManager.global().isPunishOnly()) {
+            getLogger().info("工作模式：仅处罚（punish-only）—— 只启动处罚系统与 /sfp 管理命令。");
+        } else {
+            setupTrashBin();
+            setupFloorClean();
+            setupChair();
+            setupTeleport();
+            setupBot();
+            setupUiPreferences();
+            setupMenu();
+            setupMenuClock();
+            setupTab();
+            setupScoreboard();
+        }
         setupPunish();
 
         // 3) 注册命令（依赖上面已建好的各管理器，故放在最后）
@@ -107,7 +115,7 @@ public final class SfpMain extends JavaPlugin {
             getLogger().info(line);
         }
         getLogger().info("==============================================");
-        getLogger().info("SFP-main 已启用！");
+        getLogger().info("SFP-main 已启用！（模式：" + configManager.global().modeName() + "）");
     }
 
     @Override
@@ -128,6 +136,11 @@ public final class SfpMain extends JavaPlugin {
         if (botManager != null) {
             botManager.saveData();
             botManager.shutdown();
+        }
+        // 椅子：把还坐着的玩家扶起来并移除隐形盔甲架
+        // （否则插件重载 / 禁用会留下无法回收的孤儿实体）
+        if (chairManager != null) {
+            chairManager.shutdown();
         }
         // 关闭界面偏好数据库
         if (uiPreferenceStore != null) {
@@ -163,6 +176,14 @@ public final class SfpMain extends JavaPlugin {
     private void registerCommands() {
         getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> {
             Commands registrar = event.registrar();
+
+            // 仅处罚模式：只注册处罚命令与 /sfp 管理命令，其余命令完全不注册
+            // （连「未启用」桩也不提供，避免群组服玩家看到一堆无用命令）。
+            if (configManager.global().isPunishOnly()) {
+                registrar.register("sfp", "星落平原管理命令（输入 /sfp 查看用法）", new SfpCommand(this));
+                registerPunishCommands(registrar);
+                return;
+            }
 
             // 主菜单：/menu 与简写 /m（别名）
             registrar.register("menu", "打开星落平原菜单", List.of("m"), new MenuCommand(this));
@@ -384,7 +405,8 @@ public final class SfpMain extends JavaPlugin {
             getLogger().warning("处罚数据库初始化失败，处罚功能将不可用。");
         }
         getServer().getPluginManager().registerEvents(new PunishListener(this, punishManager), this);
-        getLogger().info("处罚系统已启动（/sfpban /sfpmute /sfpkick /sfpwarn /sfpcheck，独立 punish.db）。");
+        getLogger().info("处罚系统已启动（/sfpban /sfpmute /sfpkick /sfpwarn /sfpcheck）。");
+        getLogger().info("处罚数据库：" + punishManager.getDatabase().getFile().getAbsolutePath());
     }
 
     /**
@@ -428,6 +450,8 @@ public final class SfpMain extends JavaPlugin {
     }
 
     private void setupPlaceholders(boolean papiOk) {
+        // 仅处罚模式下不装配扫地，本插件没有任何占位符要注册，直接跳过。
+        if (configManager.global().isPunishOnly()) return;
         if (!papiOk) {
             getLogger().warning("PlaceholderAPI 未安装，扫地倒计时占位符不可用。");
             return;

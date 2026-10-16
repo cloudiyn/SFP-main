@@ -19,6 +19,8 @@ import java.util.Map;
  *   <li>{@code actwarp} —— 内置动作：打开传送点列表</li>
  *   <li>{@code actback} —— 内置动作：执行返回</li>
  *   <li>{@code acttpa} —— 内置动作：打开玩家传送目标选择界面</li>
+ *   <li>{@code actrtp} —— 内置动作：执行随机传送</li>
+ *   <li>{@code actelytra} —— 内置动作：消耗钻石兑换鞘翅</li>
  * </ul>
  */
 public class MenuHolder implements InventoryHolder {
@@ -31,6 +33,9 @@ public class MenuHolder implements InventoryHolder {
     public static final String ACTION_WARP = "actwarp";
     public static final String ACTION_BACK = "actback";
     public static final String ACTION_TPA = "acttpa";
+    public static final String ACTION_RTP = "actrtp";
+    /** 内置动作：消耗钻石兑换鞘翅（消耗数量由 menu.yml 的 elytra-exchange.cost 配置） */
+    public static final String ACTION_ELYTRA = "actelytra";
     public static final String ACTION_TOGGLE_UI = "acttoggleui";
     public static final String CMD_PREFIX = "cmd:";
 

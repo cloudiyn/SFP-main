@@ -135,6 +135,8 @@ public class TrashBinManager {
      */
     public synchronized List<ItemStack> getPage(int page) {
         List<ItemStack> pageItems = new ArrayList<>();
+        // 页码兜底夹紧：越界（含负数）会让下面的下标计算出负索引
+        if (page < 0) page = 0;
         int start = page * getPageSize();
         for (int i = 0; i < getPageSize(); i++) {
             int idx = start + i;

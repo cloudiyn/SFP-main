@@ -287,12 +287,21 @@ public class BotManager {
             Object nmsPlayer = online.getClass().getMethod("getHandle").invoke(online);
 
             Method remove = null;
+            Method fallback = null;
             for (Method m : playerList.getClass().getMethods()) {
-                if (m.getName().equals("remove") && m.getParameterCount() == 1) {
+                if (!m.getName().equals("remove") || m.getParameterCount() != 1) continue;
+                Class<?> param = m.getParameterTypes()[0];
+                // 参数必须能接收假人实体（否则是别的 remove 重载）
+                if (!param.isInstance(nmsPlayer)) continue;
+                // 精准命中 ServerPlayer 优先；其余「能接收」的重载只作兜底 ——
+                // getMethods() 的顺序没有保证，光靠「名字 + 参数个数」挑容易挑错方法。
+                if (param.getSimpleName().equals("ServerPlayer")) {
                     remove = m;
                     break;
                 }
+                if (fallback == null) fallback = m;
             }
+            if (remove == null) remove = fallback;
             if (remove == null) throw new NoSuchMethodException("PlayerList#remove(ServerPlayer)");
 
             remove.invoke(playerList, nmsPlayer);

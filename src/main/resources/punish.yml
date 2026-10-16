@@ -22,7 +22,17 @@ enabled: true
 #  数据库（独立文件，不与其他功能共用）
 # ------------------------------------------------------------
 database:
-  # 数据库文件名（位于 plugins/SFP-main/ 目录下）
+  # 数据库文件位置，支持三种写法：
+  #   1. 文件名     punish.db                 → plugins/SFP-main/punish.db（默认）
+  #   2. 相对路径   data/punish.db            → plugins/SFP-main/data/punish.db
+  #   3. 绝对路径   D:/mc/shared/punish.db    → 直接用该文件
+  # 绝对路径可用于把数据放到插件目录之外（挂载盘、跨服共享目录），
+  # 或接入现有的处罚库。父目录不存在会自动创建。
+  #
+  # ⚠ 接入已有数据库时，该库必须已有本插件要求的表结构
+  #   （players / punishments / punishment_logs 三张表，可先用 /sfp test 校验）。
+  #   别家插件（LiteBans、AdvancedBan 等）的表结构不同，无法直接读取，
+  #   需先用外部工具转换。结构不符时插件不会改动原库，只在日志中提示。
   file: 'punish.db'
   # 是否自动提交：true 简单省心；改成 false 则按批提交（本插件每次操作都会 commit）
   auto-commit: true
@@ -36,8 +46,24 @@ default-reason: '违反服务器规则'
 permanent-text: '永久'
 
 # ------------------------------------------------------------
+#  踢出延迟（tick，20 tick = 1 秒）
+# ------------------------------------------------------------
+# 踢出玩家前先等待这么多 tick 再真正断开连接。**跨服（Velocity / BungeeCord）环境必须 ≥ 1**。
+#
+# 原因：玩家被踢的那个瞬间若「还没在某个子服站稳」，代理会把它当成一次连接中断，
+# 转而把玩家重新投递到 velocity.toml 里 try 列表的下一个子服（例如从 vanilla 转投 lobby）。
+# 此时客户端还没收到「开始加载区块」的包，就会一直卡在「加载地形中」，
+# 而服务端侧看到的却是「玩家已断开」—— 也就是「玩家卡住、服务端已断开」的现象。
+# 延后一 tick，让本次登录先在子服走完，代理就会按正常踢出处理：直接断开并显示踢出原因。
+#
+# 单机（无代理）环境保持 1 即可，设为 1 与「立即踢」在观感上无差别。
+kick-delay-ticks: 1
+
+# ------------------------------------------------------------
 #  音效（执行处罚 / 解除时播放给操作者；留空即静音）
 #  支持枚举名（ENTITY_VILLAGER_NO）或注册名（minecraft:entity.villager.no）
+#    punish —— warn / kick / ban / mute 成功后播放
+#    revoke —— unban / unmute 成功后播放
 # ------------------------------------------------------------
 sounds:
   punish: 'ENTITY_VILLAGER_NO'
@@ -49,11 +75,9 @@ sounds:
 #    {expire}   剩余多久
 #    {duration} 本条处罚原本的时长
 #  注意：{reason} 会原样解析 MiniMessage —— 所以处罚原因里可以直接写颜色标签。
+#  命令执行后的简短反馈在 messages.yml 的 punish.*（不在这里）。
 # ------------------------------------------------------------
 messages:
-  # 玩家进服时若有未读处罚记录（当前仅用于提示，可按需修改）
-  join-warn-notice: '<yellow>提示：你当前有处罚记录，输入 <white>/sfpcheck {player}</white> 可查看。</yellow>'
-
   # 被禁言者发言时收到的提示
   mute-notice: |-
     <red>你已被禁言</red>

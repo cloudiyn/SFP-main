@@ -2,9 +2,9 @@ package cn.starfallplain.sfpmain.teleport.command;
 
 import cn.starfallplain.sfpmain.SfpMain;
 import cn.starfallplain.sfpmain.config.module.TeleportConfig;
+import cn.starfallplain.sfpmain.menu.MenuManager;
 import cn.starfallplain.sfpmain.teleport.TeleportManager;
 import cn.starfallplain.sfpmain.teleport.db.StoredLocation;
-import cn.starfallplain.sfpmain.teleport.gui.HomeListGui;
 import cn.starfallplain.sfpmain.util.NameUtil;
 import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
@@ -83,7 +83,8 @@ public class HomeCommand implements BasicCommand {
 
         // /home 或 /home <名称>
         if (args.length == 0) {
-            HomeListGui.open(plugin, player, manager, 0);
+            // 与菜单里的「我的家」按钮同一个入口：按玩家偏好分流 dialogUI / 箱子界面
+            MenuManager.openHomeList(plugin, player);
             return;
         }
         teleportHome(player, args[0]);

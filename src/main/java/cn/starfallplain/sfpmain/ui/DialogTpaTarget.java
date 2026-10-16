@@ -17,7 +17,9 @@ import org.bukkit.entity.Player;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * dialogUI 版的「选择传送目标」界面（在线玩家列表，不含自己）。
@@ -25,6 +27,9 @@ import java.util.List;
  * 一页 {@value #PAGE_SIZE} 个玩家，底部「上一页 / 返回主菜单 / 下一页」翻页。
  * 点击玩家 = 弹出「传送方向」选择框（传送到他身边 / 让他传送到你身边），
  * 与箱子 UI 的「左键 tpa / 右键 tpahere」功能对等（dialogUI 按钮无左右键，故用两步交互）。
+ * <p>
+ * 全部文案来自 {@code messages.yml}（{@code dialogui.*} / 复用 {@code tpa.gui-title}、
+ * {@code teleport.prev|next}、{@code common.back-to-menu}），代码里不写死中文。
  */
 public final class DialogTpaTarget {
 
@@ -64,8 +69,10 @@ public final class DialogTpaTarget {
 
         for (Player target : pageTargets) {
             final Player chosen = target;
-            Component label = Messages.deserialize("<white>" + target.getName() + "</white>");
-            Component tooltip = Messages.deserialize("<gray>" + target.getWorld().getName() + "</gray>");
+            Component label = msg(plugin, "dialogui.entry-name", "<white>{name}</white>",
+                    Map.of("name", target.getName()));
+            Component tooltip = msg(plugin, "dialogui.tpa-entry-hover", "<gray>{world}</gray>",
+                    Map.of("world", target.getWorld() != null ? target.getWorld().getName() : "?"));
 
             buttons.add(ActionButton.builder(label)
                     .tooltip(tooltip)
@@ -78,9 +85,11 @@ public final class DialogTpaTarget {
         }
 
         if (currentPage > 0) {
-            buttons.add(navButton(plugin, player, currentPage - 1, "<!i><yellow>上一页</yellow>", options));
+            buttons.add(navButton(plugin, "teleport.prev", "<!i><yellow>上一页</yellow>",
+                    player, currentPage - 1, options));
         }
-        buttons.add(ActionButton.builder(Messages.deserialize("<!i><aqua>返回主菜单</aqua>"))
+        buttons.add(ActionButton.builder(plugin.getMessage("common.back-to-menu",
+                        "<!i><yellow>返回主菜单</yellow>"))
                 .action(DialogAction.customClick((view, audience) -> {
                     if (audience instanceof Player p && p.isOnline()) {
                         MenuManager.openMenuByPreference(plugin, p);
@@ -88,11 +97,17 @@ public final class DialogTpaTarget {
                 }, options))
                 .build());
         if (currentPage < totalPages - 1) {
-            buttons.add(navButton(plugin, player, currentPage + 1, "<!i><yellow>下一页</yellow>", options));
+            buttons.add(navButton(plugin, "teleport.next", "<!i><yellow>下一页</yellow>",
+                    player, currentPage + 1, options));
         }
 
-        Component title = Messages.deserialize("<aqua>选择传送目标</aqua> <gray>- 第 "
-                + (currentPage + 1) + "/" + totalPages + " 页</gray>");
+        // 标题复用箱子 UI 的 tpa.gui-title
+        Map<String, String> titlePh = new LinkedHashMap<>();
+        titlePh.put("page", String.valueOf(currentPage + 1));
+        titlePh.put("pages", String.valueOf(totalPages));
+        titlePh.put("total", String.valueOf(targets.size()));
+        Component title = msg(plugin, "tpa.gui-title",
+                "<!i><aqua>选择传送目标</aqua> <gray>- 第 {page}/{pages} 页</gray>", titlePh);
 
         Dialog dialog = Dialog.create(builder -> builder
                 .empty()
@@ -112,19 +127,26 @@ public final class DialogTpaTarget {
      */
     private static void openDirectionDialog(SfpMain plugin, Player player, Player target,
                                             TpaManager tpaManager, ClickCallback.Options options) {
-        Component title = Messages.deserialize("<aqua>玩家传送</aqua>");
-        Component body = Messages.deserialize("<yellow>" + target.getName() + "</yellow> <gray>—— 选择传送方向</gray>");
+        Map<String, String> ph = Map.of("name", target.getName());
+        Component title = msg(plugin, "dialogui.tpa-direction-title",
+                "<!i><aqua>玩家传送</aqua>", Map.of());
+        Component body = msg(plugin, "dialogui.tpa-direction-body",
+                "<!i><yellow>{name}</yellow> <gray>—— 选择传送方向</gray>", ph);
 
-        ActionButton to = ActionButton.builder(Messages.deserialize("<green>传送到他身边</green>"))
-                .tooltip(Messages.deserialize("<gray>等同 /tpa " + target.getName() + "</gray>"))
+        ActionButton to = ActionButton.builder(
+                        msg(plugin, "dialogui.tpa-to", "<!i><green>传送到他身边</green>", Map.of()))
+                .tooltip(msg(plugin, "dialogui.tpa-to-hover",
+                        "<!i><gray>等同 /tpa {name}</gray>", ph))
                 .action(DialogAction.customClick((view, audience) -> {
                     if (audience instanceof Player p && p.isOnline()) {
                         tpaManager.request(p, target, TpaManager.Type.TO);
                     }
                 }, options))
                 .build();
-        ActionButton here = ActionButton.builder(Messages.deserialize("<aqua>让他传送到你身边</aqua>"))
-                .tooltip(Messages.deserialize("<gray>等同 /tpahere " + target.getName() + "</gray>"))
+        ActionButton here = ActionButton.builder(
+                        msg(plugin, "dialogui.tpa-here", "<!i><aqua>让他传送到你身边</aqua>", Map.of()))
+                .tooltip(msg(plugin, "dialogui.tpa-here-hover",
+                        "<!i><gray>等同 /tpahere {name}</gray>", ph))
                 .action(DialogAction.customClick((view, audience) -> {
                     if (audience instanceof Player p && p.isOnline()) {
                         tpaManager.request(p, target, TpaManager.Type.HERE);
@@ -143,14 +165,19 @@ public final class DialogTpaTarget {
         player.showDialog(dialog);
     }
 
-    private static ActionButton navButton(SfpMain plugin, Player player, int page,
-                                          String label, ClickCallback.Options options) {
-        return ActionButton.builder(Messages.deserialize(label))
+    private static ActionButton navButton(SfpMain plugin, String msgKey, String fallback,
+                                          Player player, int page, ClickCallback.Options options) {
+        return ActionButton.builder(plugin.getMessage(msgKey, fallback))
                 .action(DialogAction.customClick((view, audience) -> {
                     if (audience instanceof Player p && p.isOnline()) {
                         open(plugin, p, page);
                     }
                 }, options))
                 .build();
+    }
+
+    /** 取 messages.yml 里的文案（带占位符），解析为组件 */
+    private static Component msg(SfpMain plugin, String key, String fallback, Map<String, String> ph) {
+        return Messages.deserialize(Messages.apply(plugin.getRawMessage(key, fallback), ph));
     }
 }

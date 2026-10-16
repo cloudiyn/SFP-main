@@ -9,15 +9,18 @@
 #   name      显示名（MiniMessage）
 #   lore      描述（列表，可省略）
 #   command   点击执行的命令，不含斜杠
-#             （留空 = 由插件内部处理，如垃圾桶 / 家 / 传送点 / 玩家传送 / 返回按钮）
+#             （留空 = 由插件内部处理，如垃圾桶 / 家 / 传送点 / 玩家传送 / 随机传送 / 返回按钮）
 #
-# 槽位分布（5 行 × 9 列，第 0/4 行与第 0/8 列为边框）：
+# 槽位分布（5 行 × 9 列，第 0/4 行与第 0/8 列为边框，内容只用行 1~3）：
 #       列0  列1  列2  列3  列4  列5  列6  列7  列8
 #   行0  ▓    ▓    ▓    ▓   头   ▓    ▓    ▓    ▓
-#   行1  ▓    .   返   .   家   .   点   .   桶   ▓
-#   行2  ▓    .   领   .   传   .   坐   .    .   ▓
-#   行3  ▓    .    .    .    .    .    .    .    ▓
+#   行1  ▓    返   .   家   .   点   .   桶   ▓
+#   行2  ▓    随   .   领   .   传   .   坐   ▓
+#   行3  ▓    翅   .    .   .    .   .   式   ▓
 #   行4  ▓    ▓    ▓    ▓    ▓    ▓    ▓    ▓    ▓
+#   返=back(10) 家=home(12) 点=warp(14) 桶=trashbin(16)
+#   随=rtp(19) 领=dominion(21) 传=tpa(23) 坐=chair(25)
+#   翅=elytra(28) 式=ui-toggle(34)
 #
 # 注：垃圾桶入口只保留「桶」这一个按钮（烈焰棒的自动扫地按钮已移除，避免两个按钮做同一件事）。
 # ==========================================================
@@ -94,11 +97,24 @@ bind:
   warp-button: "warp"
   back-button: "back"
   tpa-button: "tpa"
+  rtp-button: "rtp"
+  elytra-button: "elytra"
   ui-toggle-button: "ui-toggle"
+
+# 鞘翅兑换：点击「鞘翅兑换」按钮消耗材料换一个鞘翅（两种材料二选一）
+elytra-exchange:
+  # 方案 A：消耗 64 个钻石
+  diamond-cost: 64
+  # 方案 B：消耗 8 个下界残骸（与钻石二选一，优先扣钻石）
+  debris-cost: 8
+  # 旧版单材料配置（cost）已由上面两项取代；填 0 表示不接受该材料。
+  # 两个都填 0 时按钮会提示「不可用」，请至少保留其中一项。
 
 # 权限
 permission: "sfpmenu.player"
-permission-message: "你没有权限使用此命令"
+# 缺少上面权限时给玩家的提示（MiniMessage）。
+# 留空则回退到 messages.yml 的 common.no-permission
+permission-message: "<red>你没有权限使用此命令！</red>"
 
 # ---------------- 按钮 ----------------
 buttons:
@@ -106,7 +122,7 @@ buttons:
   # 返回上一位置（内部动作，等效 /back）
   back:
     enabled: true
-    slot: 19
+    slot: 10
     material: ENDER_PEARL
     name: "<light_purple>返回上一位置</light_purple>"
     lore:
@@ -116,7 +132,7 @@ buttons:
   # 个人家（内部动作，打开家列表；删除在家列表里操作）
   home:
     enabled: true
-    slot: 21
+    slot: 12
     material: RED_BED
     name: "<red>我的家</red>"
     lore:
@@ -126,7 +142,7 @@ buttons:
   # 公共传送点（内部动作，打开传送点列表；传送点由管理员管理）
   warp:
     enabled: true
-    slot: 23
+    slot: 14
     material: ENDER_EYE
     name: "<light_purple>传送点</light_purple>"
     lore:
@@ -136,7 +152,7 @@ buttons:
   # 垃圾桶（受 trashbin.yml 总开关控制）
   trashbin:
     enabled: true
-    slot: 25
+    slot: 16
     material: CAULDRON
     name: "<dark_gray>垃圾桶</dark_gray> <gray>(取回扫地物品)</gray>"
     lore:
@@ -146,7 +162,7 @@ buttons:
   # 领地菜单（执行 Dominion 领地插件命令 /dom）
   dominion:
     enabled: true
-    slot: 29
+    slot: 21
     material: GRASS_BLOCK
     name: "<green>领地菜单</green>"
     lore:
@@ -156,7 +172,7 @@ buttons:
   # 玩家传送（打开「选择传送目标」界面）
   tpa:
     enabled: true
-    slot: 31
+    slot: 23
     material: COMPASS
     name: "<aqua>玩家传送</aqua>"
     lore:
@@ -166,7 +182,7 @@ buttons:
   # 坐下休息说明（只读展示；实际交互为告示牌 + 右键方块）
   chair:
     enabled: true
-    slot: 33
+    slot: 25
     material: OAK_SIGN
     name: "<gold>坐下休息</gold>"
     lore:
@@ -182,4 +198,26 @@ buttons:
     name: "<yellow>界面样式</yellow>"
     lore:
       - "<gray>在 dialogUI 与箱子界面之间切换</gray>"
+    command: ""
+
+  # 随机传送（内部动作，等效 /rtp；受 teleport.yml 的 rtp.enabled 控制）
+  rtp:
+    enabled: true
+    slot: 19
+    material: SPYGLASS
+    name: "<green>随机传送</green>"
+    lore:
+      - "<gray>在允许的世界范围内随机找一处安全落点</gray>"
+      - "<gray>冷却：</gray><white>10 分钟</white>"
+    command: ""
+
+  # 鞘翅兑换（内部动作，消耗材料换 1 个鞘翅；数量见本文件顶部的 elytra-exchange）
+  elytra:
+    enabled: true
+    slot: 28
+    material: ELYTRA
+    name: "<light_purple>鞘翅兑换</light_purple>"
+    lore:
+      - "<gray>消耗 </gray><white>64 个钻石</white><gray> 或 </gray><white>8 个下界残骸</white>"
+      - "<gray>兑换 </gray><white>1 个鞘翅</white><gray>（不限次数）</gray>"
     command: ""

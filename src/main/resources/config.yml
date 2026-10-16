@@ -2,25 +2,39 @@
 # 星落平原主菜单 (sfp-main) —— 全局配置
 # ----------------------------------------------------------
 # 本插件按功能包拆分配置文件，一个包一份：
-#   config.yml       本文件，全局项
+#   config.yml       本文件，全局项（工作模式 / 调试开关）
 #   menu.yml         菜单（menu 包）
-#   sign.yml         每日签到（sign 包）
-#   online.yml       在线时长奖励（online 包）
 #   clean.yml        自动扫地（clean 包）
 #   trashbin.yml     垃圾桶（trashbin 包）
-#   flight.yml       付费飞行（flight 包）
 #   chair.yml        椅子（chair 包）
-#   achievement.yml  进度奖励（achievement 包）
+#   teleport.yml     传送（teleport 包：/back、/home、/warp、/tpa、/rtp）
+#   bot.yml          假人（bot 包）
+#   tab.yml          Tab 列表（display 包）
+#   scoreboard.yml   计分板（display 包）
+#   punish.yml       处罚（punish 包，独立 punish.db）
 #   messages.yml     所有面向玩家的文案
 #
 # 每个功能文件都有 enabled 开关；关掉后该模块完全停用
 # （不注册监听器 / 命令 / 占位符，菜单中也不再出现入口）。
-# 修改后执行 /sfp reload 或重启服务器生效。
-#
-# 注意：本文件的旧字段（flight / floor-clean / daily-sign /
-# online-reward / achievement）已迁移到对应模块文件，保留仅为兼容，
-# 实际生效值请到各自文件中修改。
+# 修改后执行 /sfp reload 或重启服务器生效（开关类改动必须重启）。
 # ==========================================================
+
+# ----------------------------------------------------------
+#  工作模式（群组服请务必按需设置）
+# ----------------------------------------------------------
+#  full         —— 完整模式（默认）：装配全部功能模块。
+#  punish-only  —— 仅处罚模式：只启动处罚系统与 /sfp 管理命令，
+#                  菜单 / 传送 / 扫地 / 垃圾桶 / 椅子 / 假人 / Tab / 计分板
+#                  一律不装配（不建数据库、不注册监听器、不生成实体），
+#                  相关命令也完全不注册。
+#
+#  群组服用法：处罚数据统一放主服，子服设成 punish-only 即可 ——
+#  子服只负责执行 /sfpban 等处罚命令，不需要重复跑菜单与传送。
+#  若要让多个子服共用同一个处罚库，请把 punish.yml 的
+#  database.file 指向同一个文件（如挂载盘上的绝对路径）。
+#
+#  ⚠ 模式和数据库路径改动都需重启服务器生效（/sfp reload 只重载参数）。
+mode: full
 
 # 调试模式：开启后在控制台输出更详细的运行日志
 debug: false

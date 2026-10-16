@@ -42,7 +42,55 @@ public final class DbDebug {
     private DbDebug() {
     }
 
-    // ==================== /sfp db ====================
+    // ==================== /sfp db（处罚库） ====================
+
+    /**
+     * 处罚数据库概览。供 {@code /sfp db} 在「仅处罚模式」下使用 —— 那时传送库根本没建，
+     * 展示传送库只会得到一句「未启用」，对群组服运维没有意义。
+     */
+    public static void punishOverview(SfpMain plugin, CommandSender sender) {
+        var manager = plugin.getPunishManager();
+        if (manager == null) {
+            send(sender, "<red>处罚系统未启用（punish.yml 的 enabled 为 false）。</red>");
+            return;
+        }
+        if (!manager.isStorageAvailable()) {
+            send(sender, "<red>处罚数据库不可用，请查看启动日志。</red>");
+            return;
+        }
+        var db = manager.getDatabase();
+        File file = db.getFile();
+
+        send(sender, "<dark_gray>===== 处罚数据库 =====</dark_gray>");
+        send(sender, "<gray>文件： <white>" + file.getName() + "</white> <dark_gray>("
+                + (file.length() / 1024) + " KB)</dark_gray>");
+        send(sender, "<gray>路径： <dark_gray>" + file.getAbsolutePath() + "</dark_gray>");
+
+        Connection c = db.getConnection();
+        if (c == null) {
+            send(sender, "<red>无法取得数据库连接。</red>");
+            return;
+        }
+        int actual = pragmaInt(c, "PRAGMA user_version");
+        int expected = cn.starfallplain.sfpmain.punish.PunishDatabase.expectedSchemaVersion();
+        String versionColor = actual == expected ? "green" : "red";
+        send(sender, "<gray>表结构版本： <" + versionColor + ">v" + actual + "</" + versionColor
+                + "> <gray>（代码期望 v" + expected + "）</gray>");
+        send(sender, "<gray>journal 模式： <white>" + pragmaText(c, "PRAGMA journal_mode") + "</white>");
+
+        StringBuilder sb = new StringBuilder("<gray>数据：");
+        for (String t : tables(c)) {
+            if (t.startsWith("sqlite_")) continue;
+            sb.append(" <white>").append(t).append("</white>")
+                    .append("<gray> ").append(count(c, t)).append(" 行　");
+        }
+        send(sender, sb.toString());
+
+        send(sender, "<gray>当前生效： <white>封禁 " + manager.bannedNames().size()
+                + "</white> 人，<white>禁言 " + manager.mutedNames().size() + "</white> 人");
+    }
+
+    // ==================== /sfp db（传送库） ====================
 
     /** 概览：文件、版本、journal 模式、各表行数 */
     public static void overview(SfpMain plugin, CommandSender sender) {
