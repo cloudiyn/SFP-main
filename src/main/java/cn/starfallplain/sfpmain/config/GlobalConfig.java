@@ -12,7 +12,7 @@ public final class GlobalConfig {
      * <ul>
      *   <li>{@link #MODE_FULL} —— 完整模式：装配全部功能模块（默认）。</li>
      *   <li>{@link #MODE_PUNISH_ONLY} —— 仅处罚模式：只启动处罚系统 + {@code /sfp} 管理命令，
-     *       其余模块（菜单 / 传送 / 扫地 / 垃圾桶 / 椅子 / 假人 / Tab / 计分板）一律不装配。
+     *       其余模块（菜单 / 传送 / 扫地 / 垃圾桶 / 假人 / Tab / 计分板）一律不装配。
      *       群组服里用于「只跑处罚的子服」，避免重复加载与权限冲突。</li>
      * </ul>
      */

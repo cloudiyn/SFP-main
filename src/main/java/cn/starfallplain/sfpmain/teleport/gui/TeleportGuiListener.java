@@ -5,7 +5,6 @@ import cn.starfallplain.sfpmain.config.module.TeleportConfig;
 import cn.starfallplain.sfpmain.menu.MenuManager;
 import cn.starfallplain.sfpmain.teleport.TeleportManager;
 import cn.starfallplain.sfpmain.teleport.TpaManager;
-import cn.starfallplain.sfpmain.teleport.db.StoredLocation;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;

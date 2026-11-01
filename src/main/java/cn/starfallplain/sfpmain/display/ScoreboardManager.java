@@ -2,7 +2,7 @@ package cn.starfallplain.sfpmain.display;
 
 import cn.starfallplain.sfpmain.SfpMain;
 import cn.starfallplain.sfpmain.config.ConfigManager;
-import cn.starfallplain.sfpmain.config.module.ScoreboardConfig;
+import cn.starfallplain.sfpmain.config.module.DisplayConfig;
 import io.papermc.paper.scoreboard.numbers.NumberFormat;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -25,7 +25,7 @@ import java.util.UUID;
 /**
  * 右侧计分板信息栏。
  * <p>
- * 标题与每行内容来自 scoreboard.yml（每秒刷新）。每位玩家使用**独立**的
+ * 标题与每行内容来自 display.yml 的 scoreboard 段（每秒刷新）。每位玩家使用**独立**的
  * {@link Scoreboard} 实例，避免污染服务端主计分板；行内容用
  * {@link Score#customName(Component)} 直接承载（entry 只是内部 key，不显示）。
  * <p>
@@ -37,13 +37,13 @@ public class ScoreboardManager implements Listener {
     /** 行的内部 entry 前缀（不会显示给玩家，显示内容由 customName 决定） */
     private static final String ENTRY_PREFIX = "sfp_line_";
 
-    private final ScoreboardConfig config;
+    private final DisplayConfig config;
     private final Map<UUID, Scoreboard> boards = new HashMap<>();
     private final BukkitTask task;
 
     public ScoreboardManager(SfpMain plugin, ConfigManager configManager) {
-        this.config = configManager.scoreboard();
-        int period = Math.max(1, config.getRefreshTicks());
+        this.config = configManager.display();
+        int period = Math.max(1, config.getScoreboardRefreshTicks());
         this.task = Bukkit.getScheduler().runTaskTimer(plugin, this::refresh, 20L, period);
     }
 
@@ -64,7 +64,7 @@ public class ScoreboardManager implements Listener {
             return created;
         });
 
-        Component title = DisplayText.render(player, config.getTitle());
+        Component title = DisplayText.render(player, config.getScoreboardTitle());
         Objective objective = board.getObjective(OBJECTIVE_NAME);
         if (objective == null) {
             objective = board.registerNewObjective(OBJECTIVE_NAME, Criteria.DUMMY, title);
@@ -78,8 +78,8 @@ public class ScoreboardManager implements Listener {
             objective.displayName(title);
         }
 
-        List<String> lines = config.getLines();
-        int count = Math.min(lines.size(), ScoreboardConfig.MAX_LINES);
+        List<String> lines = config.getScoreboardLines();
+        int count = Math.min(lines.size(), DisplayConfig.MAX_LINES);
         int score = count;
         for (int i = 0; i < count; i++) {
             Score line = objective.getScore(ENTRY_PREFIX + i);
@@ -87,7 +87,7 @@ public class ScoreboardManager implements Listener {
             line.customName(DisplayText.render(player, lines.get(i)));
         }
         // 行数变少时清理多余的行
-        for (int i = count; i < ScoreboardConfig.MAX_LINES; i++) {
+        for (int i = count; i < DisplayConfig.MAX_LINES; i++) {
             String entry = ENTRY_PREFIX + i;
             if (!board.getEntries().contains(entry)) break;
             board.resetScores(entry);

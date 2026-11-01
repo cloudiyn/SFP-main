@@ -1,10 +1,10 @@
 package cn.starfallplain.sfpmain.debug;
 
 import cn.starfallplain.sfpmain.SfpMain;
-import cn.starfallplain.sfpmain.chair.ChairManager;
 import cn.starfallplain.sfpmain.clean.FloorCleanManager;
 import cn.starfallplain.sfpmain.config.ConfigManager;
 import cn.starfallplain.sfpmain.config.Messages;
+import cn.starfallplain.sfpmain.config.module.ChainConfig;
 import cn.starfallplain.sfpmain.config.module.MenuConfig;
 import cn.starfallplain.sfpmain.menu.MenuClockManager;
 import cn.starfallplain.sfpmain.menu.MenuHolder;
@@ -67,6 +67,9 @@ public final class SelfTest {
             "menu.elytra-success", "menu.elytra-not-enough", "menu.elytra-misconfigured",
             "trashbin.title", "trashbin.disabled", "trashbin.prev", "trashbin.next",
             "clean.reminder", "clean.result",
+            "clean.enabled", "clean.disabled", "clean.database-error", "clean.world-not-found",
+            "clean.invalid-coordinate", "clean.exception-added", "clean.exception-removed",
+            "clean.exception-unchanged",
             "home.teleport-success", "home.set-success", "home.not-found",
             "warp.teleport-success", "warp.set-success", "warp.not-found",
             "back.no-location", "back.success",
@@ -103,11 +106,39 @@ public final class SelfTest {
             "punish.log-line",
             // ---- 2.11.0：假人坐标用法 ----
             "bot.usage-coords",
+            // ---- 2.13.0：连锁挖矿 ----
+            "chain.broken", "chain.partial", "chain.not-enough-food",
+            // ---- 2.12.0：假人重写为 /sfp player（对齐 minecraft-fakeplayer）----
+            "bot.spawn-usage", "bot.select-usage", "bot.select-player-only",
+            "bot.selection-none", "bot.selection-current", "bot.no-selection",
+            "bot.status-header", "bot.status-offline", "bot.status-online", "bot.status-actions",
+            "bot.status-settings-header", "bot.status-settings-entry", "bot.status-owner",
+            "bot.offline", "bot.player-only", "bot.distance", "bot.distance-other-world",
+            "bot.drop-empty", "bot.dropped", "bot.dropped-stack", "bot.dropped-inv",
+            "bot.swapped", "bot.held", "bot.hold-usage",
+            "bot.teleported-to", "bot.teleported-here", "bot.teleported-swap",
+            "bot.exp-none", "bot.exp-transferred",
+            "bot.cmd-empty", "bot.cmd-done", "bot.cmd-failed", "bot.cmd-usage",
+            "bot.skin-usage", "bot.skin-not-found", "bot.skin-failed", "bot.skin-copied",
+            "bot.set-usage", "bot.set-done",
+            "bot.config-header", "bot.config-entry", "bot.config-player-only",
+            "bot.config-set-done", "bot.config-cleared", "bot.config-clear-none", "bot.config-usage",
+            "bot.action-toggled", "bot.action-none", "bot.action-stopped", "bot.action-failed",
+            "bot.jump", "bot.sneak-toggled", "bot.sprint-toggled",
+            "bot.looked", "bot.look-usage", "bot.turned", "bot.turn-usage",
+            "bot.ridden", "bot.dismounted", "bot.ride-none", "bot.ride-failed",
+            "bot.sleep", "bot.wakeup",
+            "bot.respawned", "bot.respawn-alive", "bot.respawn-failed",
+            // ---- 2.16.1：命令提示统一（未知子命令/带权限节点/用法兜底）----
+            "common.no-permission-with-node", "common.unknown-subcommand-input",
+            "common.unknown-subcommand-suggest", "common.unknown-subcommand-hint",
+            "bot.config-set-usage", "bot.sneak-usage", "bot.sprint-usage",
     };
 
     /** 代码里实际用到的权限节点（应全部在 paper-plugin.yml 的 permissions 段声明） */
     private static final String[] USED_PERMISSIONS = {
-            "sfpmenu.player", "sfpmenu.teleport", "sfpmenu.bot", "sfpmenu.admin",
+            "sfpmenu.player", "sfpmenu.teleport", "sfpmenu.bot", "sfpmenu.bot.killall", "sfpmenu.admin",
+            "sfpmenu.clean.manage",
             "sfpmenu.home.bypass-limit", "sfpmenu.warp.set", "sfpmenu.warp.delete",
             "sfpmenu.punish.check", "sfpmenu.punish.warn", "sfpmenu.punish.kick",
             "sfpmenu.punish.ban", "sfpmenu.punish.mute", "sfpmenu.punish.unban", "sfpmenu.punish.unmute",
@@ -150,6 +181,7 @@ public final class SelfTest {
         checkStorage(plugin, r);
         checkTeleportData(plugin, r);
         checkBots(plugin, r);
+        checkChain(plugin, r);
         checkPunish(plugin, r);
         checkModules(plugin, r, sender);
         DbDebug.send(sender, "<dark_gray>------------------------------------</dark_gray>");
@@ -169,9 +201,11 @@ public final class SelfTest {
         loaded.put("menu.yml", cm.menu() != null && cm.menu().raw() != null);
         loaded.put("clean.yml", cm.clean() != null && cm.clean().raw() != null);
         loaded.put("trashbin.yml", cm.trashBin() != null && cm.trashBin().raw() != null);
-        loaded.put("chair.yml", cm.chair() != null && cm.chair().raw() != null);
         loaded.put("teleport.yml", cm.teleport() != null && cm.teleport().raw() != null);
         loaded.put("punish.yml", cm.punish() != null && cm.punish().raw() != null);
+        loaded.put("bot.yml", cm.bot() != null && cm.bot().raw() != null);
+        loaded.put("chain.yml", cm.chain() != null && cm.chain().raw() != null);
+        loaded.put("display.yml", cm.display() != null && cm.display().raw() != null);
         List<String> notLoaded = new ArrayList<>();
         loaded.forEach((name, okFlag) -> {
             if (!okFlag) notLoaded.add(name);
@@ -272,7 +306,6 @@ public final class SelfTest {
             staleKeys.add("clean.yml 的 worlds.only-loaded-chunks");
         }
         if (cm.trashBin().isSet("global")) staleKeys.add("trashbin.yml 的 global");
-        if (cm.chair().isSet("stand-on.sneak")) staleKeys.add("chair.yml 的 stand-on.sneak");
         if (cm.teleport().isSet("allow-cross-world") || cm.teleport().isSet("teleport.allow-cross-world")) {
             staleKeys.add("teleport.yml 的 allow-cross-world");
         }
@@ -576,18 +609,8 @@ public final class SelfTest {
             }
         }
 
-        // 椅子说明按钮：lore 里写死的告示牌关键字（该按钮没有 bind 绑定，id 固定为 chair）
-        String chairLore = buttonLore(menu, "chair");
-        if (chairLore != null) {
-            var chair = plugin.getConfigManager().chair();
-            if (!chairLore.contains(chair.getLeftKeyword()) || !chairLore.contains(chair.getRightKeyword())) {
-                stale.add("椅子说明按钮 lore 的关键字与 chair.yml 的 sign.left-keyword（"
-                        + chair.getLeftKeyword() + "）/ right-keyword（" + chair.getRightKeyword() + "）不一致");
-            }
-        }
-
         if (stale.isEmpty()) {
-            r.ok("菜单按钮 lore 与相关配置一致（随机传送冷却 / 椅子关键字）");
+            r.ok("菜单按钮 lore 与相关配置一致（随机传送冷却）");
         } else {
             r.warn("菜单按钮 lore 与配置不一致，玩家看到的说明会和实际行为不符："
                     + String.join("；", stale) + "（请手工同步 menu.yml 里对应按钮的 lore）");
@@ -732,6 +755,64 @@ public final class SelfTest {
 
     // ==================== 功能模块 ====================
 
+    /**
+     * 连锁挖矿配置体检。
+     * <p>
+     * 重点是「配错了也不报错」那一类：{@code blocks} 里写了不存在的方块名时，
+     * 连锁会静默失效（玩家蹲下挖矿毫无反应），而配置本身加载完全正常 ——
+     * 只有把名字逐个拿去 {@code Material.valueOf} 比对才能发现。
+     */
+    private static void checkChain(SfpMain plugin, Report r) {
+        r.section("连锁挖矿");
+        var cfg = plugin.getConfigManager().chain();
+        if (!cfg.isEnabled()) {
+            r.warn("连锁挖矿模块未启用（chain.yml 的 enabled 为 false），跳过检查");
+            return;
+        }
+        if (plugin.getChainManager() == null) {
+            r.fail("连锁挖矿监听器未注册 —— 检查启动日志与 setupChain()");
+            return;
+        }
+
+        // 方块名是否都是真实存在的 Material
+        List<String> unknown = new ArrayList<>();
+        for (String name : cfg.getBlocks()) {
+            if (Material.matchMaterial(name) == null) unknown.add(name);
+        }
+        if (unknown.isEmpty()) {
+            r.ok("收录的 " + cfg.getBlocks().size() + " 种连锁方块全部有效");
+        } else {
+            r.fail("chain.yml 的 blocks 里有 " + unknown.size() + " 个不存在的方块名，连锁会静默失效："
+                    + String.join(", ", unknown) + " —— 去掉它们或改成正确的 Material 名");
+        }
+
+        if (cfg.getMaxBlocks() < 1) {
+            r.fail("max-blocks 小于 1，连锁永远不会触发（应为 1 以上）");
+        } else if (cfg.getMaxBlocks() > 256) {
+            r.warn("max-blocks 为 " + cfg.getMaxBlocks() + "，一次连锁可能瞬间挖掉几百块，"
+                    + "掉落物与区块加载压力都很大，建议控制在 64 以内");
+        } else {
+            r.ok("单次连锁上限 " + cfg.getMaxBlocks() + " 块");
+        }
+
+        if (cfg.getExhaustionPerBlock() <= 0) {
+            r.warn("food.exhaustion-per-block 为 " + cfg.getExhaustionPerBlock()
+                    + "：连锁不扣饱食度，等于白嫖（若是有意为之可忽略）");
+        } else {
+            int perTen = (int) Math.floor(10 * cfg.getExhaustionPerBlock() + 0.5);
+            r.ok("每块扣 " + cfg.getExhaustionPerBlock() + " 饱食度（挖 10 块约扣 " + perTen + " 点）");
+        }
+
+        if (!cfg.isRequireSneak()) {
+            r.warn("require.sneak 为 false：不蹲下也会连锁，误伤风险明显上升");
+        }
+        if (!cfg.isChainBots()) {
+            r.ok("假人挖矿不参与连锁（require.chain-bots=false）");
+        } else {
+            r.warn("require.chain-bots 为 true：假人会一次连锁挖光整片矿脉并扣饱食度");
+        }
+    }
+
     /** 处罚系统：数据库连通性 + 三张表结构 + 当前生效处罚数量 */
     private static void checkPunish(SfpMain plugin, Report r) {
         r.section("处罚系统");
@@ -823,6 +904,11 @@ public final class SelfTest {
             r.warn("假人模块未启用（bot.yml 的 enabled 为 false），跳过检查");
             return;
         }
+        if (cfg.getInvalidPickupMaterials().isEmpty()) {
+            r.ok("假人拾取白名单物品名有效（空列表表示全部拾取）");
+        } else {
+            r.fail("假人拾取白名单包含无效物品：" + String.join(", ", cfg.getInvalidPickupMaterials()));
+        }
         var manager = plugin.getBotManager();
         if (manager == null) {
             r.fail("假人管理器未创建 —— 检查启动日志");
@@ -833,7 +919,7 @@ public final class SelfTest {
             r.warn("restore-on-start 为 false：重启服务器后假人不会自动重建");
         }
 
-        File file = new File(plugin.getDataFolder(), "bots.yml");
+        File file = manager.dataFile();
         if (!file.isFile()) {
             r.ok("还没有 bots.yml（没有创建过假人）");
             return;
@@ -884,15 +970,25 @@ public final class SelfTest {
                 ? "<dark_gray>未启动</dark_gray>"
                 : "<white>下次清扫还有 " + clean.formatTime() + "</white>"));
 
+        var sweep = plugin.getSweepExceptionStore();
+        if (sweep != null) {
+            var exceptions = sweep.getExceptions();
+            DbDebug.send(sender, "<gray>  · 扫地管理：</gray>" + (sweep.isAvailable()
+                    ? "<white>" + (sweep.isEnabled() ? "已开启" : "已暂停")
+                            + "，例外区块 " + (exceptions == null ? "读取失败" : exceptions.size()) + " 个</white>"
+                    : "<dark_gray>数据库不可用</dark_gray>"));
+        }
+
+        ChainConfig chain = plugin.getConfigManager().chain();
+        DbDebug.send(sender, "<gray>  · 连锁挖矿：</gray>" + (chain == null || !chain.isEnabled()
+                ? "<dark_gray>未启动</dark_gray>"
+                : "<white>上限 " + chain.getMaxBlocks() + " 块 / 每块 "
+                        + chain.getExhaustionPerBlock() + " 饱食度</white>"));
+
         TrashBinManager trash = plugin.getTrashBinManager();
         DbDebug.send(sender, "<gray>  · 垃圾桶：</gray>" + (trash == null
                 ? "<dark_gray>未启动</dark_gray>"
                 : "<white>" + trash.size() + " 件 / " + trash.getPageCount() + " 页</white>"));
-
-        ChairManager chair = plugin.getChairManager();
-        DbDebug.send(sender, "<gray>  · 椅子：</gray>" + (chair == null
-                ? "<dark_gray>未启动</dark_gray>"
-                : "<white>当前 " + chair.sittingCount() + " 人在座</white>"));
 
         TeleportManager tp = plugin.getTeleportManager();
         DbDebug.send(sender, "<gray>  · 传送：</gray>" + (tp == null
@@ -915,9 +1011,10 @@ public final class SelfTest {
                         : "<dark_gray>已关闭（teleport.yml 的 tpa.enabled）</dark_gray>")));
 
         cn.starfallplain.sfpmain.bot.BotManager bot = plugin.getBotManager();
-        DbDebug.send(sender, "<gray>  · 假人（/bot）：</gray>" + (bot == null
+        DbDebug.send(sender, "<gray>  · 假人（/sfp player）：</gray>" + (bot == null
                 ? "<dark_gray>未启动</dark_gray>"
-                : "<white>" + bot.size() + " 个（已加入 " + bot.onlineCount() + "）</white>"));
+                : "<white>" + bot.size() + " 个（已加入 " + bot.onlineCount()
+                        + "，持续动作 " + bot.activeActionCount() + " 个）</white>"));
 
         cn.starfallplain.sfpmain.punish.PunishManager punish = plugin.getPunishManager();
         DbDebug.send(sender, "<gray>  · 处罚系统：</gray>" + (punish == null

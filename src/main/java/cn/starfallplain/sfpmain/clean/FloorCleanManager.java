@@ -33,16 +33,18 @@ public class FloorCleanManager {
     private final CleanConfig config;
     private final Messages messages;
     private final TrashBinManager trashBinManager;
+    private final SweepExceptionStore sweepStore;
     private final int cycleSeconds;
     private final List<Integer> warnSeconds;
     private int remainingSeconds;
     private final Set<Integer> reminded = new HashSet<>();
 
-    public FloorCleanManager(JavaPlugin plugin, ConfigManager configManager, TrashBinManager trashBinManager) {
+    public FloorCleanManager(JavaPlugin plugin, ConfigManager configManager, TrashBinManager trashBinManager, SweepExceptionStore sweepStore) {
         this.plugin = plugin;
         this.config = configManager.clean();
         this.messages = configManager.messages();
         this.trashBinManager = trashBinManager;
+        this.sweepStore = sweepStore;
         this.cycleSeconds = Math.max(60, config.getCycleSeconds()); // 至少 60 秒
         this.warnSeconds = config.getWarnSeconds();
         this.remainingSeconds = this.cycleSeconds;
@@ -57,6 +59,8 @@ public class FloorCleanManager {
         new BukkitRunnable() {
             @Override
             public void run() {
+                // 管理开关关闭时暂停扫地倒计时与清扫。
+                if (sweepStore != null && !sweepStore.isEnabled()) return;
                 // 到达提醒点时广播
                 for (int remind : warnSeconds) {
                     if (remainingSeconds == remind && !reminded.contains(remind)) {
@@ -86,12 +90,25 @@ public class FloorCleanManager {
      * 由 {@code to-trashbin} 决定是进垃圾桶（可取回）还是直接销毁。
      */
     private void performClean() {
+        // 例外区块读不出来时宁可整轮不清扫：否则 example 区块里的物品会被误删（数据损失不可逆）。
+        if (sweepStore == null) {
+            plugin.getLogger().warning("扫地管理数据库不可用，本轮跳过清扫（例外区块无法读取）。");
+            return;
+        }
+        Set<String> exceptions = sweepStore.getExceptions();
+        if (exceptions == null) {
+            plugin.getLogger().warning("扫地区块例外读取失败，本轮跳过清扫。");
+            return;
+        }
         List<ItemStack> collected = new ArrayList<>();
         int count = 0;
         for (World world : Bukkit.getWorlds()) {
             if (!config.isWorldIncluded(world.getName())) continue;
             for (Entity entity : world.getEntities()) {
                 if (entity instanceof Item itemEntity) {
+                    org.bukkit.Location location = entity.getLocation();
+                    if (exceptions.contains(SweepExceptionStore.key(world.getName(),
+                            location.getChunk().getX(), location.getChunk().getZ()))) continue;
                     ItemStack stack = itemEntity.getItemStack();
                     if (stack != null && !stack.getType().isAir()) {
                         collected.add(stack);

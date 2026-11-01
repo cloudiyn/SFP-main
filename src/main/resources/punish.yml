@@ -2,7 +2,7 @@
 #  星落平原 —— 处罚系统配置（punish.yml）
 # ============================================================
 #  功能：警告 / 踢出 / 定时封禁 / 定时禁言，以及查询与解除。
-#  数据存于独立的 punish.db（SQLite），与传送数据完全隔离。
+#  数据存于独立的 data/punish.db（SQLite），与传送数据完全隔离；旧版根目录文件会自动迁移。
 #
 #  命令一览（权限节点见 paper-plugin.yml 的 permissions 段）：
 #    /sfpcheck  <处罚ID 或 玩家名>   查询处罚记录
@@ -23,7 +23,8 @@ enabled: true
 # ------------------------------------------------------------
 database:
   # 数据库文件位置，支持三种写法：
-  #   1. 文件名     punish.db                 → plugins/SFP-main/punish.db（默认）
+  #   1. 文件名     punish.db                 → plugins/SFP-main/data/punish.db（默认）
+  #      旧版 plugins/SFP-main/punish.db 会在首次启动时自动迁移。
   #   2. 相对路径   data/punish.db            → plugins/SFP-main/data/punish.db
   #   3. 绝对路径   D:/mc/shared/punish.db    → 直接用该文件
   # 绝对路径可用于把数据放到插件目录之外（挂载盘、跨服共享目录），

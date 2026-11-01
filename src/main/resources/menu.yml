@@ -15,11 +15,11 @@
 #       列0  列1  列2  列3  列4  列5  列6  列7  列8
 #   行0  ▓    ▓    ▓    ▓   头   ▓    ▓    ▓    ▓
 #   行1  ▓    返   .   家   .   点   .   桶   ▓
-#   行2  ▓    随   .   领   .   传   .   坐   ▓
+#   行2  ▓    随   .   领   .   传   .    .    ▓
 #   行3  ▓    翅   .    .   .    .   .   式   ▓
 #   行4  ▓    ▓    ▓    ▓    ▓    ▓    ▓    ▓    ▓
 #   返=back(10) 家=home(12) 点=warp(14) 桶=trashbin(16)
-#   随=rtp(19) 领=dominion(21) 传=tpa(23) 坐=chair(25)
+#   随=rtp(19) 领=dominion(21) 传=tpa(23)
 #   翅=elytra(28) 式=ui-toggle(34)
 #
 # 注：垃圾桶入口只保留「桶」这一个按钮（烈焰棒的自动扫地按钮已移除，避免两个按钮做同一件事）。
@@ -177,17 +177,6 @@ buttons:
     name: "<aqua>玩家传送</aqua>"
     lore:
       - "<gray>选择一个在线玩家，再选择传送方向</gray>"
-    command: ""
-
-  # 坐下休息说明（只读展示；实际交互为告示牌 + 右键方块）
-  chair:
-    enabled: true
-    slot: 25
-    material: OAK_SIGN
-    name: "<gold>坐下休息</gold>"
-    lore:
-      - "<gray>在方块两侧放告示牌，写上 chair-l / chair-r</gray>"
-      - "<gray>右键中间方块即可坐下</gray>"
     command: ""
 
   # 界面样式切换（内部动作，在 dialogUI 与箱子界面之间切换）

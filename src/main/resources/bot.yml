@@ -1,11 +1,11 @@
 # ==========================================================
-# 假人（bot 包）
+# 假人（bot 包）—— 命令：/sfp player 或 /sfp fp
 # ----------------------------------------------------------
-# /bot create <名字>                   在当前位置创建一个假人
-# /bot create <名字> <世界> <x> <y> <z>  在指定坐标创建（控制台用）
-# /bot remove <名字>                   删除假人
-# /bot list                            列出所有假人
-# /bot removeall                       删除全部假人
+# /sfp player spawn <名字> [世界 x y z]   在当前所在位置创建一个假人
+# /sfp player kill [名字] / killall       移除假人 / 移除全部
+# /sfp player list                        列出所有假人
+# /sfp player select <名字>               设定默认假人（之后命令可省略名字）
+# /sfp player                             查看完整用法
 #
 # 假人是什么：
 #   它是**真正的玩家实体**（NMS 的 ServerPlayer），不是盔甲架之类的近似物 ——
@@ -18,21 +18,22 @@
 #   这属于 NMS 层面的操作，**Minecraft 大版本更新后可能需要跟着修**；
 #   如果启动日志里出现「假人重建失败」，看具体异常即可定位。
 #
-#   假人不接受任何指令、不响应聊天、不移动、不会主动做什么，
-#   除了「占位 + 保持区块加载」之外没有别的行为。
+#   除了占位与保区块，假人还能被命令驱动：持续攻击 / 挖掘 / 使用 / 移动，
+#   以及跳、潜行、疾跑、看向、转向、骑乘、睡觉、丢物品、开背包、传送……
+#   详见 features.md「假人」一节。
 #
 # 数据保存在插件数据目录的 bots.yml，服务器重启后会自动重建这些假人
 # （假人不是真玩家、没有会话，重启后必须重新加入）。
 # ==========================================================
 
-# 总开关：false 则 /bot 命令一律提示未启用
+# 总开关：false 则 /sfp player 命令一律提示未启用
 enabled: true
 
 # 启动时是否自动重建 bots.yml 里记录的假人
 restore-on-start: true
 
 # 是否给假人套用创建者（或指定玩家）的皮肤
-#   留空    = 用创建者自己的皮肤；控制台创建时用默认皮肤
+#   留空    = 看假人设置的 skin 项（默认用创建者自己的皮肤；控制台创建时用默认皮肤）
 #   none    = 用默认皮肤
 #   玩家名  = 用该玩家的皮肤（需该玩家曾在线，皮肤数据来自其档案）
 skin-source: ""
@@ -42,3 +43,54 @@ max-name-length: 16
 
 # 每位玩家最多创建几个假人（0 = 不限；控制台创建的不计入）
 max-per-player: 3
+
+# ----------------------------------------------------------
+# 持续动作（attack / mine / use / move）的执行参数
+# ----------------------------------------------------------
+
+# 持续动作每隔多少 tick 执行一次（20 tick = 1 秒；4 tick = 每秒 5 次）
+action-interval-ticks: 4
+
+# 持续攻击时搜索实体的半径（格）
+attack-range: 4.0
+
+# 持续攻击是否把玩家也算作目标
+#   false = 只打怪物与动物（默认，避免误伤玩家）
+#   true  = 附近有玩家也会打（对齐 minecraft-fakeplayer 的默认行为）
+attack-players: false
+
+# 超级回复（wolverine）的回血间隔（tick）
+wolverine-interval-ticks: 20
+
+# 双手按原物品补货（replenish）的检查间隔（tick）；使用动作后也会立即检查
+replenish-interval-ticks: 20
+
+# 自动钓鱼：抛竿后等待咬钩的最长时间（秒），超时就收竿重抛
+autofish-timeout-seconds: 30
+
+# 拾取物品白名单，填写物品 Material 名（例如 COBBLESTONE、minecraft:wheat）。
+# 空列表 = 不限制（兼容旧版）；非空时仅拾取列表内物品。
+# 无效名称会在日志和 /sfp test 提示，不会因此放开限制。
+pickup-whitelist: []
+
+# ----------------------------------------------------------
+# 新建假人的默认设置（可被每位玩家的个人配置覆盖：
+# /sfp player config set <键> <true|false>）
+#   collidable     碰撞盒（false = 其他玩家可以穿过假人）
+#   invulnerable   无敌（false = 会受伤挨饿，需配合 wolverine 保命）
+#   wolverine      超级回复（定时回满生命与饱食度）
+#   look_at_entity 持续攻击时自动看向目标
+#   pickup_items   自动捡起掉落物
+#   replenish      主手/副手按原物品从背包补货，不会随意拿其他物品
+#   autofish       自动钓鱼（手持鱼竿时自动抛竿/收竿）
+#   skin           创建时使用创建者自己的皮肤
+# ----------------------------------------------------------
+defaults:
+  collidable: true
+  invulnerable: true
+  wolverine: false
+  look_at_entity: false
+  pickup_items: true
+  replenish: false
+  autofish: false
+  skin: true

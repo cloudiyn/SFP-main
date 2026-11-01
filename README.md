@@ -1,6 +1,6 @@
 # 星落平原 SFP-main
 
-> 「星落平原」生存服整合插件 —— 一个统一入口的 **Paper 原生插件**，把菜单、传送、自动扫地、垃圾桶、椅子收进一套配置里。
+> 「星落平原」生存服整合插件 —— 一个统一入口的 **Paper 原生插件**，把菜单、传送、自动扫地、垃圾桶收进一套配置里。
 >
 > Paper 26.1+ / Java 25 · 全功能可开关 · 文案全可改 · 传送数据 SQLite 持久化
 
@@ -29,8 +29,7 @@
 
 - 一个统一主菜单 `/menu`，把服务器功能收进一个 GUI，玩家不用记命令；
 - 一套自研传送系统 `/back` `/home` `/warp`，数据存 SQLite，重启不丢；
-- 定时自动清扫地面掉落物，清扫物进垃圾桶可随时取回，不再担心误清；
-- 告示牌椅子，右键就能坐下休息。
+- 定时自动清扫地面掉落物，清扫物默认进垃圾桶可随时取回（`to-trashbin` 关闭则直接销毁），不再担心误清。
 
 设计上有几条贯穿全项目的原则：
 
@@ -49,19 +48,22 @@
 |------|------|
 | **主菜单** | 5 行居中布局，边框 + 玩家头 + 功能按钮；按钮的开关 / 槽位 / 图标 / 名称 / 命令全在 `menu.yml` |
 | **菜单钟** | 把一个泥土放进合成格即可合成的「钟」（带附魔光效），手持右键直接打开菜单，无需记命令 |
-| **界面样式** | 主菜单 / 列表支持 Paper 弹窗（dialogUI）与箱子两种样式，玩家偏好存 `settings.db`，`/menuui` 切换 |
+| **界面样式** | 主菜单 / 列表支持 Paper 弹窗（dialogUI）与箱子两种样式，玩家偏好存 `data/settings.db`，`/menuui` 切换 |
 | **返回上一位置 `/back`** | 回到上次传送前的位置或死亡点，死亡捡尸不用跑图 |
 | **个人家 `/home`** | 默认最多 5 个家，GUI 列表左键传送、右键删除，设置与传送各有冷却 |
 | **公共传送点 `/warp`** | 管理员创建的全服传送点，GUI 列表同样支持左键传送 / 右键删除 |
 | **玩家传送 `/tpa`** | 玩家之间互相传送，回应界面可在弹窗与聊天按钮间切换（`/tpaui`） |
 | **随机传送 `/rtp`** | 在当前世界 ±50000 范围内随机找一处安全落点；默认仅主世界可用，冷却 10 分钟（全部可配置） |
 | **延迟传送** | `delay-seconds > 0` 时先等待再传送，等待期间移动（跨越方块）即打断 |
-| **自动扫地** | 默认 15 分钟一轮，清扫前 60/30/10 秒广播提醒，支持世界黑白名单、跳过改名物品 |
-| **垃圾桶** | 被清扫物品不消失，进垃圾桶可点回背包；容量上限 486，超出丢弃最旧 |
-| **椅子** | 方块两侧贴木告示牌写 `chair-l` / `chair-r`，右键中间方块即可坐下 |
-| **假人 `/bot`** | 创建真玩家实体，用于保持区块加载（需 `sfpmenu.bot` 权限） |
-| **Tab / 计分板** | Tab 头部底部与右侧计分板，内容与刷新频率全在 `tab.yml` / `scoreboard.yml` |
+| **自动扫地** | 默认 15 分钟一轮，清扫前 60/30/10 秒广播提醒，支持世界黑白名单；清扫物默认收入垃圾桶（`clean.yml` 的 `to-trashbin` 可关，关后直接销毁） |
+| **垃圾桶** | 清扫物默认进垃圾桶，可点回背包；容量上限 486，超出丢弃最旧 |
+| **连锁挖矿** | 蹲下挖矿时连锁同种矿脉（上限 32 块，按方块量扣饱食度；假人不参与） |
+| **假人 `/sfp player`** | 创建真玩家实体：保区块 + 可驱动（攻击/挖掘/使用/移动/钓鱼/背包/传送，需 `sfpmenu.bot`）；右键假人可打开**可编辑物品栏**（主手/副手实时可改） |
+| **Tab / 计分板** | Tab 头部底部与右侧计分板，内容与刷新频率全在 `display.yml` 的 `tab` / `scoreboard` 两段 |
+| **处罚系统** | `/sfpwarn` `/sfpkick` `/sfpban` `/sfpmute` + `/sfpcheck` `/sfpunban` `/sfpunmute`，可按权限分级（默认仅 OP）；数据存 `data/punish.db` |
 | **领地入口** | 菜单按钮直接执行 Dominion 的 `/dom`，领地管理交给专业插件 |
+
+> **2.16.0 假人更新**：右键假人打开可编辑的物品栏界面（主手 / 副手实时修改，主手格映射当前快捷栏槽；支持左右键、Shift、数字键与 F，拖拽 / 双击 / 创造克隆 / 窗口外丢弃会被拒绝）；`use` 动作改为先主手再副手，物品耗尽时按原类型从背包 9~35 格补货；`bot.yml` 新增 `pickup-whitelist`（留空 = 全部可拾取）。
 
 ---
 
@@ -87,7 +89,7 @@
 
 1. 从 Releases 下载 `sfp-main-<版本>.jar`；
 2. 丢进服务端的 `plugins/` 目录；
-3. 启动服务器一次，插件会在 `plugins/SFP-main/` 生成全部配置文件；
+3. 启动服务器一次，插件会在 `plugins/SFP-main/` 生成全部配置文件，数据文件则生成在 `plugins/SFP-main/data/`；
 4. 按需要改配置（见 [配置文件](#配置文件)），**开关类改动需重启服务器**，参数类改动 `/sfp reload` 即可；
 5. `/menu` 打开菜单验货。
 
@@ -100,6 +102,7 @@
 | 命令 | 别名 | 说明 |
 |------|------|------|
 | `/menu` | `/m` | 打开主菜单 |
+| `/menuui` | — | 切换界面样式（dialogUI 弹窗 / 箱子） |
 | `/back` | — | 返回上一位置（上次传送前 / 死亡点） |
 | `/rtp` | — | 随机传送（当前世界 ±50000 内随机找安全落点，默认仅主世界、冷却 10 分钟） |
 | `/home` | — | 打开家列表 |
@@ -109,24 +112,54 @@
 | `/homes` | — | 聊天栏列出所有家 |
 | `/warp` | — | 打开公共传送点列表 |
 | `/warp <名称>` | — | 传送到指定传送点 |
-| `/setwarp <名称>` | — | 创建传送点（需权限） |
-| `/delwarp <名称>` | — | 删除传送点（需权限） |
+| `/setwarp <名称>` | — | 创建传送点（需 `sfpmenu.warp.set`） |
+| `/delwarp <名称>` | — | 删除传送点（需 `sfpmenu.warp.delete`） |
 | `/warps` | — | 聊天栏列出所有传送点 |
+| `/tpa <玩家名>` | — | 请求**传送到对方身边** |
+| `/tpahere <玩家名>` | — | 请求**对方传送到你身边** |
+| `/tpaccept [玩家名]` | — | 接受收到的传送请求 |
+| `/tpdeny [玩家名]` | — | 拒绝收到的传送请求 |
+| `/tpaui` | — | 切换传送请求的回应界面（弹窗 ↔ 聊天按钮） |
 | `/trashbin` | — | 打开垃圾桶，取回被清扫的物品 |
-| `/sfp reload` | — | 重载配置（仅参数类改动生效） |
+| `/sfp reload` | — | 重载配置（`sfpmenu.admin`；开关类改动需重启） |
+| `/sfp status` | — | 运行状态与各模块实时数据（`sfpmenu.admin`） |
+| `/sfp db [子命令]` | — | 数据库概览，子命令 `tables` / `homes` / `warps` / `back` / `check` / `checkpoint`（`sfpmenu.admin`） |
+| `/sfp test` | — | 全量自检并输出报告（`sfpmenu.admin`） |
+| `/sfp sweep on|off` | — | 开启 / 关闭自动扫地（`sfpmenu.clean.manage`） |
+| `/sfp sweep except add|remove <世界> <区块X> <区块Z>` | — | 维护扫地例外区块（`sfpmenu.clean.manage`） |
+| `/sfp player help` | `/sfp fp …` | 假人管理：输入 help 查看全部 37 个子命令（`sfpmenu.bot`，`killall` 另需 `sfpmenu.bot.killall`） |
+| `/sfpcheck <处罚ID 或 玩家名>` | — | 查询处罚记录（`sfpmenu.punish.check`） |
+| `/sfpwarn <在线玩家> <原因>` | — | 警告在线玩家（`sfpmenu.punish.warn`） |
+| `/sfpkick <在线玩家> <原因>` | — | 踢出在线玩家（`sfpmenu.punish.kick`） |
+| `/sfpban <玩家> <时间> <原因>` | — | 封禁，可对离线玩家（`sfpmenu.punish.ban`） |
+| `/sfpmute <玩家> <时间> <原因>` | — | 禁言，可对离线玩家（`sfpmenu.punish.mute`） |
+| `/sfpunban <玩家名>` | — | 解除封禁，目标取自数据库（`sfpmenu.punish.unban`） |
+| `/sfpunmute <玩家名>` | — | 解除禁言，目标取自数据库（`sfpmenu.punish.unmute`） |
+
+> 处罚命令的时间写法：`7d` / `12h` / `1d2h30m` / `90s` / `perm`（永久），单位 `w`周 `d`天 `h`时 `m`分 `s`秒，可组合、可乱序。
 
 ### 权限节点
 
 | 权限 | 默认 | 说明 |
 |------|------|------|
-| `sfpmenu.player` | 所有人 | 允许打开星落平原菜单 |
-| `sfpmenu.teleport` | 所有人 | 允许使用传送命令 |
+| `sfpmenu.player` | 所有人 | 打开菜单、`/trashbin` |
+| `sfpmenu.teleport` | 所有人 | `/back` `/rtp` `/home` `/warp` `/tpa` 等全部传送命令 |
 | `sfpmenu.home.bypass-limit` | 无 | 绕过家数量上限 |
-| `sfpmenu.warp.set` | OP | 允许 `/setwarp` |
-| `sfpmenu.warp.delete` | OP | 允许 `/delwarp` |
-| `sfpmenu.admin` | OP | 允许 `/sfp` 管理命令 |
+| `sfpmenu.warp.set` | OP | `/setwarp` |
+| `sfpmenu.warp.delete` | OP | `/delwarp` |
+| `sfpmenu.admin` | OP | `/sfp`（reload / status / db / test） |
+| `sfpmenu.clean.manage` | OP | `/sfp sweep`（自动扫地开关与例外区块） |
+| `sfpmenu.bot` | OP | `/sfp player` / `/sfp fp`（假人全部子命令） |
+| `sfpmenu.bot.killall` | OP | `/sfp player killall`（一次移除全部假人） |
+| `sfpmenu.punish.check` | OP | `/sfpcheck` 查询处罚记录 |
+| `sfpmenu.punish.warn` | OP | `/sfpwarn` 警告 |
+| `sfpmenu.punish.kick` | OP | `/sfpkick` 踢出 |
+| `sfpmenu.punish.ban` | OP | `/sfpban` 封禁 |
+| `sfpmenu.punish.mute` | OP | `/sfpmute` 禁言 |
+| `sfpmenu.punish.unban` | OP | `/sfpunban` 解除封禁 |
+| `sfpmenu.punish.unmute` | OP | `/sfpunmute` 解除禁言 |
 
-> 权限检查写在各命令的 `execute` 内而非 `BasicCommand#permission()`，这样无权限的玩家会收到「你没有权限」提示，而不是命令直接“不存在”。代价是补全列表里仍能看到命令。
+> 共 **16 个**权限节点，全部在 `src/main/resources/paper-plugin.yml` 声明。权限检查写在各命令的 `execute` 内而非 `BasicCommand#permission()`，这样无权限的玩家会收到「你没有权限（需要 <节点>）」提示，而不是命令直接“不存在”。代价是补全列表里仍能看到命令。
 
 ---
 
@@ -136,8 +169,7 @@
 
 - 家名只能使用字母、数字、下划线，长度 1~16；
 - 传送 GUI 列表中，**左键传送、右键删除**；
-- 椅子：在方块左右两侧贴木告示牌，第一行分别写 `chair-l` 与 `chair-r`（以你坐下后面朝的方向为准，左手边 `chair-l`），右键中间方块坐下；按 Shift、再次右键、传送离开或退出游戏即可起身；
-- 被清扫的物品一定先进垃圾桶，垃圾桶满 486 件后才丢弃最旧的。
+- 被清扫的物品**默认收入垃圾桶**（`clean.yml` 的 `to-trashbin` 改为 `false` 后直接销毁、无法取回），垃圾桶满 486 件后才丢弃最旧的。
 
 ---
 
@@ -147,18 +179,21 @@
 
 | 文件 | 对应功能 | 关键项 |
 |------|---------|--------|
-| `config.yml` | 全局 | `debug` 调试日志 |
+| `config.yml` | 全局 | `mode`（`full` 完整 / `punish-only` 仅处罚）、`debug` 调试日志 |
 | `menu.yml` | 主菜单 | 标题、行数、边框材质、**每个按钮的 `enabled` / `slot` / `material` / `name` / `lore` / `command`**、菜单钟（`menu-clock`：材质 / 名称 / 光效 / 触发方式 / 合成材料） |
 | `messages.yml` | 全部文案 | 所有面向玩家的提示语，支持 MiniMessage 与 `&a` 传统色码 |
-| `clean.yml` | 自动扫地 | `enabled`、清扫周期、提醒时间点、世界黑白名单、是否入垃圾桶 |
+| `clean.yml` | 自动扫地 | `enabled`、清扫周期、提醒时间点、世界黑白名单、`to-trashbin`（默认 `true` 收入垃圾桶，`false` 直接销毁） |
 | `trashbin.yml` | 垃圾桶 | `enabled`、容量上限、音效 |
-| `chair.yml` | 椅子 | `enabled`、告示牌关键字、允许木种、起身方式 |
 | `teleport.yml` | 传送 | 总开关、`back` / `home` / `warp` / `rtp` 各自开关、家数量上限、冷却、安全落点、延迟传送、数据库文件名 |
-| `bot.yml` | 假人 | `enabled`、假名数量上限等 |
-| `tab.yml` / `scoreboard.yml` | 信息显示 | `enabled`、刷新频率、头部/底部或标题/行内容（支持内置占位符与 PAPI） |
+| `chain.yml` | 连锁挖矿 | `enabled`、触发条件、连锁上限、饱食度费率、收录方块 |
+| `bot.yml` | 假人 | `enabled`、数量上限、动作间隔与攻击范围、新建假人的默认设置 |
+| `display.yml` | 信息显示 | 顶层 `tab` / `scoreboard` 两段，各含 `enabled`、`refresh-ticks`、头部/底部或标题/行内容（支持内置占位符与 PAPI） |
+| `punish.yml` | 处罚系统 | 处罚文案（踢下线整屏 / 禁言提示 / 全服广播）、数据库文件名 |
 
 几条约定：
 
+- **旧配置自动合并**：旧版的 `tab.yml` / `scoreboard.yml` 会在首次启动时合并进 `display.yml` 并删除旧文件，无需手工迁移；
+- **工作模式**：`config.yml` 的 `mode: full | punish-only`。`punish-only` 专为群组子服设计 —— 只装配处罚系统与 `/sfp`，不装配菜单 / 传送 / 扫地 / 垃圾桶 / 假人 / 显示，也不注册它们的命令；**模式改动需重启生效**；
 - **关闭某个功能**：对应文件 `enabled: false`。该模块不加载、不注册事件，菜单入口同步消失；
 - **改配置后生效**：参数类 `/sfp reload` 即时生效；**开关类改动必须重启服务器**（监听器注册不可逆）；
 - **加 / 改菜单按钮**：只编辑 `menu.yml` 的 `buttons` 段，`command` 留空即执行插件内部动作，填 `cmd:xxx` 则以玩家身份执行该命令（领地按钮就是 `cmd:dom`）；
@@ -181,7 +216,18 @@
 
 ## 数据存储
 
-传送数据存于插件数据目录下的 **`teleport.db`**（SQLite），三张表：
+所有数据文件统一放在插件目录的 **`data/`** 子目录（`plugins/SFP-main/data/`）：
+
+| 文件 | 内容 |
+|------|------|
+| `teleport.db` | 传送数据（SQLite） |
+| `punish.db` | 处罚记录（SQLite） |
+| `settings.db` | 玩家界面偏好（dialogUI / 箱子、tpa 回应形式） |
+| `sweep.db` | 自动扫地的区块例外 |
+| `trashbin-data.yml` | 垃圾桶内容 |
+| `bots.yml` | 假人记录（设置与持续动作） |
+
+传送数据存于 **`data/teleport.db`**（SQLite），三张表：
 
 | 表 | 内容 |
 |----|------|
@@ -190,6 +236,10 @@
 | `last_locations` | `/back` 返回点 |
 
 世界按名存储；目标世界不存在时会给出提示而不是报错。**删除 `teleport.db` 即清空所有传送数据。**
+
+**旧版迁移**：旧版把数据文件直接放在插件根目录（如 `plugins/SFP-main/teleport.db`），首次启动会自动迁入 `data/`；若新旧两处同时存在同名主库，插件会**拒绝启动**并在日志打 `severe`，避免误选旧库导致数据丢失。
+
+**备份**：正常停服后直接拷整个 `plugins/SFP-main/data/` 目录（配置文件另拷 `plugins/SFP-main/` 下的各 yml）。开服状态下想单拷传送库，先执行 `/sfp db checkpoint` 把 WAL 并回 `data/teleport.db`，再连同 `-wal` / `-shm` 一起拷（或干脆整目录拷）。数据库路径语义：**纯文件名**（如 `teleport.db`）→ 放 `data/` 下；**带目录的相对路径**保持原样（不再额外加 `data/`）；**绝对路径**原样使用（可用于跨服共享数据库）。
 
 ---
 
@@ -218,8 +268,7 @@ mvn clean package
 - 开关类配置改动必须重启服务器，`/sfp reload` 只重载参数；
 - 传送模块被关闭时，`/back` `/home` `/warp` 等命令仍会注册，但统一回复「该功能当前未启用」，避免玩家以为命令不存在；
 - 跨世界 `/back` 记录统一走 `PlayerTeleportEvent` 判定，不依赖 `PlayerChangedWorldEvent`（后者拿不到旧坐标）；
-- 当前版本 **2.11.0**：功能已可用，但仍有若干交互（tpa 弹窗等）只在测试服验证过，
-  生产环境请先在测试服过一遍（26.3 官方目前只有 beta 构建）。
+- 当前版本 **2.16.1**：2.16.1 改进命令提示（未知子命令先回显输入并给出相似建议、缺参给该子命令的完整用法、无权限提示带权限节点、新增 `/sfp player help`），并修复假人攻击（不再跳过盔甲架，同一动作周期连打两次以对应原版 5 tick 内两击；攻击前按脚下方块校正落地状态，主手是剑时恢复原版横扫）。功能已可用，但仍有若干交互（tpa 弹窗、假人部分子命令等）只在测试服验证过，生产环境请先在测试服过一遍（26.3 官方目前只有 beta 构建）。
 
 ---
 

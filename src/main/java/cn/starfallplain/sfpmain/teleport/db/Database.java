@@ -1,5 +1,6 @@
 package cn.starfallplain.sfpmain.teleport.db;
 
+import cn.starfallplain.sfpmain.util.DatabaseFileResolver;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
@@ -14,7 +15,7 @@ import java.util.List;
 /**
  * SQLite 连接与表结构管理。
  * <p>
- * 数据库文件位于插件数据目录（默认 teleport.db）。
+ * 数据库文件位于插件数据目录的 data/ 子目录（默认 data/teleport.db）；旧版根目录文件会自动迁移。
  * 采用单连接 + 同步访问（传送数据量小、写入频率低，无需连接池）。
  * <p>
  * <b>单连接只允许在主线程访问</b>：{@link #getConnection()} 本身是同步的，但返回的连接
@@ -111,7 +112,7 @@ public final class Database {
         if (!plugin.getDataFolder().exists() && !plugin.getDataFolder().mkdirs()) {
             plugin.getLogger().warning("无法创建插件数据目录，传送数据库可能无法保存。");
         }
-        this.dbFile = new File(plugin.getDataFolder(), fileName);
+        this.dbFile = DatabaseFileResolver.resolve(plugin, fileName, "teleport.db");
         connect();
         initSchema();
     }

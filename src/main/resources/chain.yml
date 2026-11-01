@@ -1,0 +1,65 @@
+# ==========================================================
+# 连锁挖矿（chain 包）
+# 文案在 messages.yml 的 chain.* 中修改
+# ==========================================================
+
+# 总开关：false 则不注册连锁挖矿监听器
+enabled: true
+
+# 触发条件
+require:
+  # 必须蹲下（Shift）才会触发连锁
+  sneak: true
+  # 必须手持工具（镐/斧/锹/锄）才触发；false = 空手也能连锁
+  require-tool: true
+  # 必须处于生存模式；创造模式玩家不消耗饱食度，也不触发连锁
+  # true = 创造/冒险模式玩家挖矿不触发连锁
+  survival-only: true
+  # 假人（/sfp player 创建的）挖矿是否也参与连锁。
+  # false = 假人只挖它自己盯住的那一块，不连锁 —— 推荐。
+  #   假人是自动化工具人，连锁对它没有手感意义，却会瞬间吃光整条矿脉并扣饱食度。
+  chain-bots: false
+
+# 连锁范围
+# 从挖掉的第一个方块向外做广度优先扩散，只挖「同种」矿脉方块。
+# 注意：这是「总量上限」，不是固定半径 —— 扩散遇到上限就停，
+# 所以放在矿脉旁边时连锁范围天然随矿脉形状变化。
+max-blocks: 32
+
+# 扣饱食度
+# 按「连锁额外挖掉的方块数」收费：每块扣 exhaustion-per-block 点饱食度。
+# 第一个方块由玩家正常挖掉，走原版规则，不额外收费。
+# 扣不动时（饱食度不足且扣完会归零）只挖第一个方块，不触发连锁。
+food:
+  # 每块扣多少点饱食度（0.1 = 挖 10 块扣 1 点）
+  exhaustion-per-block: 0.1
+  # 扣到饱食度 0 时停止连锁（true = 饿了就挖不动了）
+  stop-when-hungry: true
+
+# 参与连锁的方块（按 Material 名，留空 = 用内置默认表）
+# 内置默认表见 features.md：所有 *_ORE / *_DEEPSLATE_*_ORE，
+# 以及 ancient_debris、nether_gold_ore、nether_quartz_ore 等矿脉方块。
+# 不含钻石/青金石/绿宝石这类「宝石」—— 它们通常单块出现，连锁没意义。
+blocks: []
+
+# 连锁时是否也给经验（原版挖矿会给，默认保持一致）
+give-experience: true
+
+# 是否播放连锁音效（挖掉一整片矿脉的反馈）
+sound:
+  enabled: true
+  # 每个方块都播（反馈密集）还是整片只播一次
+  per-block: false
+  name: BLOCK_STONE_BREAK
+  volume: 0.6
+  pitch: 1.2
+
+# 生效世界范围（留空 = 所有世界）
+worlds:
+  whitelist: []
+  blacklist: []
+
+# 连锁结果提示（发给触发者）
+# 0 = 只在真正连锁了 1 块及以上时才提示
+message:
+  enabled: true

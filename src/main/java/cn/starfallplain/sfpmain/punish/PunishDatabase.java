@@ -1,5 +1,6 @@
 package cn.starfallplain.sfpmain.punish;
 
+import cn.starfallplain.sfpmain.util.DatabaseFileResolver;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
@@ -12,7 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 处罚系统的 SQLite 连接与表结构管理（独立数据库文件 punish.db）。
+ * 处罚系统的 SQLite 连接与表结构管理（独立数据库文件 data/punish.db；旧版根目录自动迁移）。
  * <p>
  * 与传送数据库（{@code teleport.db}）完全隔离：独立文件、独立连接，
  * 这样处罚数据的读写不会影响传送，删库也互不牵连。
@@ -98,39 +99,12 @@ public final class PunishDatabase {
         if (!plugin.getDataFolder().exists() && !plugin.getDataFolder().mkdirs()) {
             plugin.getLogger().warning("无法创建插件数据目录，处罚数据库可能无法保存。");
         }
-        this.dbFile = resolveDbFile(plugin, fileName);
+        this.dbFile = DatabaseFileResolver.resolve(plugin, fileName, "punish.db");
         connect();
         initSchema();
     }
 
-    /**
-     * 解析数据库文件位置，支持三种写法：
-     * <ul>
-     *   <li><b>相对文件名</b>（如 {@code punish.db}）—— 放在插件数据目录
-     *       {@code plugins/SFP-main/} 下，与旧行为一致；</li>
-     *   <li><b>相对路径</b>（如 {@code data/punish.db}）—— 同样相对插件数据目录；</li>
-     *   <li><b>绝对路径</b>（如 {@code /opt/mc/shared/punish.db} 或 Windows 的
-     *       {@code D:/mc/shared/punish.db}）—— 直接使用，可用于接入现成的封禁数据库，
-     *       或把数据放到插件目录之外（如挂载盘、跨服共享目录）。</li>
-     * </ul>
-     * 绝对路径的父目录若不存在会自动创建，避免 SQLite 打开时报
-     * {@code path to database does not exist}。
-     */
-    private static File resolveDbFile(JavaPlugin plugin, String configured) {
-        String raw = configured == null ? "" : configured.trim();
-        if (raw.isEmpty()) raw = "punish.db";
-        File file = new File(raw);
-        if (!file.isAbsolute()) {
-            file = new File(plugin.getDataFolder(), raw);
-        }
-        File parent = file.getParentFile();
-        if (parent != null && !parent.exists() && !parent.mkdirs()) {
-            plugin.getLogger().warning("无法创建处罚数据库目录：" + parent.getAbsolutePath()
-                    + "，请检查路径是否存在或权限是否足够。");
-        }
-        return file;
-    }
-
+    /** 数据库路径由 DatabaseFileResolver 统一处理。 */
 
     /** 建立连接并加载驱动 */
     private void connect() {

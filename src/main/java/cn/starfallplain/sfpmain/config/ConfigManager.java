@@ -1,12 +1,11 @@
 package cn.starfallplain.sfpmain.config;
 
 import cn.starfallplain.sfpmain.config.module.BotConfig;
-import cn.starfallplain.sfpmain.config.module.ChairConfig;
+import cn.starfallplain.sfpmain.config.module.ChainConfig;
+import cn.starfallplain.sfpmain.config.module.DisplayConfig;
 import cn.starfallplain.sfpmain.config.module.CleanConfig;
 import cn.starfallplain.sfpmain.config.module.MenuConfig;
 import cn.starfallplain.sfpmain.config.module.PunishConfig;
-import cn.starfallplain.sfpmain.config.module.ScoreboardConfig;
-import cn.starfallplain.sfpmain.config.module.TabConfig;
 import cn.starfallplain.sfpmain.config.module.TeleportConfig;
 import cn.starfallplain.sfpmain.config.module.TrashBinConfig;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -23,11 +22,9 @@ import java.util.List;
  *   menu.yml         菜单（menu 包）
  *   clean.yml        自动扫地（clean 包）
  *   trashbin.yml     垃圾桶（trashbin 包）
- *   chair.yml        椅子（chair 包）
  *   teleport.yml     传送（teleport 包：/back、/home、/warp、/tpa）
  *   bot.yml          假人（bot 包）
- *   tab.yml          Tab 列表（display 包）
- *   scoreboard.yml   计分板（display 包）
+ *   display.yml      Tab 列表与计分板（display 包）
  *   messages.yml     所有面向玩家的文案
  * </pre>
  * 每个功能文件都有 enabled 开关，关掉即完全停用对应功能
@@ -43,12 +40,11 @@ public final class ConfigManager {
 
     private MenuConfig menuConfig;
     private CleanConfig cleanConfig;
+    private ChainConfig chainConfig;
     private TrashBinConfig trashBinConfig;
-    private ChairConfig chairConfig;
     private TeleportConfig teleportConfig;
     private BotConfig botConfig;
-    private TabConfig tabConfig;
-    private ScoreboardConfig scoreboardConfig;
+    private DisplayConfig displayConfig;
     private PunishConfig punishConfig;
 
     public ConfigManager(JavaPlugin plugin) {
@@ -64,12 +60,11 @@ public final class ConfigManager {
     public void loadAll() {
         menuConfig = new MenuConfig(plugin);
         cleanConfig = new CleanConfig(plugin);
+        chainConfig = new ChainConfig(plugin);
         trashBinConfig = new TrashBinConfig(plugin);
-        chairConfig = new ChairConfig(plugin);
         teleportConfig = new TeleportConfig(plugin);
         botConfig = new BotConfig(plugin);
-        tabConfig = new TabConfig(plugin);
-        scoreboardConfig = new ScoreboardConfig(plugin);
+        displayConfig = new DisplayConfig(plugin);
         punishConfig = new PunishConfig(plugin);
     }
 
@@ -100,13 +95,13 @@ public final class ConfigManager {
         lines.add("  · 菜单钟（右键开菜单）："
                 + (menuConfig.isEnabled() && menuConfig.isMenuClockEnabled() ? "已启用" : "已关闭（配置）"));
         lines.add(flagLine("自动扫地", cleanConfig.isEnabled(), true));
+        lines.add(flagLine("连锁挖矿", chainConfig.isEnabled(), true));
         lines.add(flagLine("垃圾桶", trashBinConfig.isEnabled(), true));
-        lines.add(flagLine("椅子", chairConfig.isEnabled(), true));
         lines.add(flagLine("传送（/back /home /warp /tpa /rtp）", teleportConfig.isEnabled(), true));
         lines.add("  · 随机传送（/rtp）：" + describeRtp(teleportConfig));
-        lines.add(flagLine("假人（/bot）", botConfig.isEnabled(), true));
-        lines.add(flagLine("Tab 列表", tabConfig.isEnabled(), true));
-        lines.add(flagLine("计分板", scoreboardConfig.isEnabled(), true));
+        lines.add(flagLine("假人（/sfp player）", botConfig.isEnabled(), true));
+        lines.add(flagLine("Tab 列表", displayConfig.isTabEnabled(), true));
+        lines.add(flagLine("计分板", displayConfig.isScoreboardEnabled(), true));
         lines.add(flagLine("处罚系统（/sfpban /sfpmute /sfpkick /sfpwarn）", punishConfig.isEnabled(), true));
         lines.add("  · 扫地倒计时 PAPI 占位符：" + (papiAvailable ? "可用" : "不可用（缺少 PlaceholderAPI）"));
         return lines;
@@ -152,12 +147,12 @@ public final class ConfigManager {
         return cleanConfig;
     }
 
-    public TrashBinConfig trashBin() {
-        return trashBinConfig;
+    public ChainConfig chain() {
+        return chainConfig;
     }
 
-    public ChairConfig chair() {
-        return chairConfig;
+    public TrashBinConfig trashBin() {
+        return trashBinConfig;
     }
 
     public TeleportConfig teleport() {
@@ -168,12 +163,8 @@ public final class ConfigManager {
         return botConfig;
     }
 
-    public TabConfig tab() {
-        return tabConfig;
-    }
-
-    public ScoreboardConfig scoreboard() {
-        return scoreboardConfig;
+    public DisplayConfig display() {
+        return displayConfig;
     }
 
     public PunishConfig punish() {

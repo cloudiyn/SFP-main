@@ -6,12 +6,10 @@
 #   menu.yml         菜单（menu 包）
 #   clean.yml        自动扫地（clean 包）
 #   trashbin.yml     垃圾桶（trashbin 包）
-#   chair.yml        椅子（chair 包）
 #   teleport.yml     传送（teleport 包：/back、/home、/warp、/tpa、/rtp）
 #   bot.yml          假人（bot 包）
-#   tab.yml          Tab 列表（display 包）
-#   scoreboard.yml   计分板（display 包）
-#   punish.yml       处罚（punish 包，独立 punish.db）
+#   display.yml      Tab 列表与计分板（display 包）
+#   punish.yml       处罚（punish 包，独立 data/punish.db；旧版根目录自动迁移）
 #   messages.yml     所有面向玩家的文案
 #
 # 每个功能文件都有 enabled 开关；关掉后该模块完全停用
@@ -24,7 +22,7 @@
 # ----------------------------------------------------------
 #  full         —— 完整模式（默认）：装配全部功能模块。
 #  punish-only  —— 仅处罚模式：只启动处罚系统与 /sfp 管理命令，
-#                  菜单 / 传送 / 扫地 / 垃圾桶 / 椅子 / 假人 / Tab / 计分板
+#                  菜单 / 传送 / 扫地 / 垃圾桶 / 假人 / Tab / 计分板
 #                  一律不装配（不建数据库、不注册监听器、不生成实体），
 #                  相关命令也完全不注册。
 #

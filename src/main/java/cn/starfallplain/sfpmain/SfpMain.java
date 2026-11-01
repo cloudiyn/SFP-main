@@ -1,15 +1,15 @@
 package cn.starfallplain.sfpmain;
 
-import cn.starfallplain.sfpmain.bot.BotCommand;
 import cn.starfallplain.sfpmain.bot.BotManager;
 import cn.starfallplain.sfpmain.display.ScoreboardManager;
 import cn.starfallplain.sfpmain.display.TabManager;
 import cn.starfallplain.sfpmain.ui.MenuUiCommand;
 import cn.starfallplain.sfpmain.ui.UiPreferenceStore;
-import cn.starfallplain.sfpmain.chair.ChairListener;
-import cn.starfallplain.sfpmain.chair.ChairManager;
+import cn.starfallplain.sfpmain.chain.ChainListener;
+import cn.starfallplain.sfpmain.chain.ChainManager;
 import cn.starfallplain.sfpmain.clean.CleanTimePlaceholder;
 import cn.starfallplain.sfpmain.clean.FloorCleanManager;
+import cn.starfallplain.sfpmain.clean.SweepExceptionStore;
 import cn.starfallplain.sfpmain.config.ConfigManager;
 import cn.starfallplain.sfpmain.debug.SfpCommand;
 import cn.starfallplain.sfpmain.menu.MenuClockJoinListener;
@@ -45,7 +45,7 @@ import java.util.List;
 /**
  * 星落平原主菜单插件主类。
  * <p>
- * 仅保留插件自研功能（菜单、自动扫地、垃圾桶、椅子、传送）与 Dominion 领地入口；
+ * 仅保留插件自研功能（菜单、自动扫地、垃圾桶、传送）与 Dominion 领地入口；
  * 不再依赖 HuskHomes / Vault 等经济与传送插件。
  * 所有功能均由配置文件驱动，开关关闭的模块不会被实例化、不注册监听器。
  * <p>
@@ -57,14 +57,15 @@ public final class SfpMain extends JavaPlugin {
     private ConfigManager configManager;
 
     private FloorCleanManager floorCleanManager;
-    private ChairManager chairManager;
+    private SweepExceptionStore sweepExceptionStore;
+    private ChainManager chainManager;
     private TrashBinManager trashBinManager;
     private TeleportManager teleportManager;
     /** 玩家间传送请求（/tpa /tpahere /tpaccept /tpdeny），随传送系统一同创建 */
     private TpaManager tpaManager;
     /** 假人（/bot）：真玩家实体，用于保持区块加载 */
     private BotManager botManager;
-    /** 界面样式偏好（dialogUI / 箱子），存 settings.db */
+    /** 界面样式偏好（dialogUI / 箱子），存 data/settings.db（旧版根目录自动迁移） */
     private UiPreferenceStore uiPreferenceStore;
     /** Tab 列表头部 / 底部（display 包） */
     private TabManager tabManager;
@@ -72,7 +73,7 @@ public final class SfpMain extends JavaPlugin {
     private ScoreboardManager scoreboardManager;
     /** 菜单钟：合成获得、右键打开菜单（menu 包） */
     private MenuClockManager menuClockManager;
-    /** 处罚系统：定时封禁 / 禁言 / 踢出 / 警告（punish 包，独立 punish.db） */
+    /** 处罚系统：定时封禁 / 禁言 / 踢出 / 警告（punish 包，独立 data/punish.db） */
     private PunishManager punishManager;
 
     @Override
@@ -91,8 +92,9 @@ public final class SfpMain extends JavaPlugin {
             getLogger().info("工作模式：仅处罚（punish-only）—— 只启动处罚系统与 /sfp 管理命令。");
         } else {
             setupTrashBin();
+            setupSweepExceptions();
             setupFloorClean();
-            setupChair();
+            setupChain();
             setupTeleport();
             setupBot();
             setupUiPreferences();
@@ -124,6 +126,9 @@ public final class SfpMain extends JavaPlugin {
         if (trashBinManager != null) {
             trashBinManager.save();
         }
+        if (sweepExceptionStore != null) {
+            sweepExceptionStore.close();
+        }
         // 关闭传送数据库连接
         if (teleportManager != null) {
             teleportManager.shutdown();
@@ -136,11 +141,6 @@ public final class SfpMain extends JavaPlugin {
         if (botManager != null) {
             botManager.saveData();
             botManager.shutdown();
-        }
-        // 椅子：把还坐着的玩家扶起来并移除隐形盔甲架
-        // （否则插件重载 / 禁用会留下无法回收的孤儿实体）
-        if (chairManager != null) {
-            chairManager.shutdown();
         }
         // 关闭界面偏好数据库
         if (uiPreferenceStore != null) {
@@ -195,14 +195,10 @@ public final class SfpMain extends JavaPlugin {
             // 传送命令
             registerTeleportCommands(registrar);
 
-            // 假人：/bot create|remove|list|removeall
-            registrar.register("bot", "假人管理（创建/删除/列表；假人会保持所在区块加载）",
-                    new BotCommand(this));
-
             // 界面样式切换：/menuui dialogui|box
             registrar.register("menuui", "切换界面样式（dialogUI / 箱子）", new MenuUiCommand(this));
 
-            // 管理 / 调试命令 /sfp：reload / status / db / test
+            // 管理 / 调试命令 /sfp：reload / status / db / test / sweep
             registrar.register("sfp", "星落平原管理命令（输入 /sfp 查看用法）", new SfpCommand(this));
 
             // 处罚系统命令（7 个）
@@ -314,24 +310,36 @@ public final class SfpMain extends JavaPlugin {
         getLogger().info("垃圾桶系统已启动（/trashbin 打开）。");
     }
 
+    private void setupSweepExceptions() {
+        sweepExceptionStore = new SweepExceptionStore(this);
+    }
+
     private void setupFloorClean() {
         if (!configManager.clean().isEnabled()) {
             getLogger().info("自动扫地：已按配置关闭。");
             return;
         }
-        floorCleanManager = new FloorCleanManager(this, configManager, trashBinManager);
+        floorCleanManager = new FloorCleanManager(this, configManager, trashBinManager, sweepExceptionStore);
         getLogger().info("扫地系统已启动（周期 " + floorCleanManager.formatTime() + "，"
                 + (floorCleanManager.getConfig().isToTrashBin() && trashBinManager != null
                         ? "物品收入垃圾桶" : "物品直接删除") + "）。");
     }
 
-    private void setupChair() {
-        if (!configManager.chair().isEnabled()) {
-            getLogger().info("椅子：已按配置关闭。");
+    /**
+     * 连锁挖矿：只注册一个 {@code BlockBreakEvent} 监听器，没有后台任务与状态。
+     * <p>
+     * 装配顺序上放在扫地之后 —— 两者都会碰到掉落物，但扫地只处理实体物品，
+     * 连锁只处理方块，互不干扰。
+     */
+    private void setupChain() {
+        if (!configManager.chain().isEnabled()) {
+            getLogger().info("连锁挖矿：已按配置关闭。");
             return;
         }
-        chairManager = new ChairManager(this, configManager);
-        getServer().getPluginManager().registerEvents(new ChairListener(this, configManager, chairManager), this);
+        chainManager = new ChainManager(this);
+        getServer().getPluginManager().registerEvents(new ChainListener(this), this);
+        int max = configManager.chain().getMaxBlocks();
+        getLogger().info("连锁挖矿已启动（蹲下挖矿触发，单次上限 " + max + " 块）。");
     }
 
     /**
@@ -342,18 +350,18 @@ public final class SfpMain extends JavaPlugin {
     }
 
     /**
-     * Tab 列表（display 包）：头部 / 底部文字，内容与频率全部来自 tab.yml。
+     * Tab 列表（display 包）：头部 / 底部文字，内容与频率全部来自 display.yml 的 tab 段。
      */
     private void setupTab() {
-        if (!configManager.tab().isEnabled()) return;
+        if (!configManager.display().isTabEnabled()) return;
         tabManager = new TabManager(this, configManager);
     }
 
     /**
-     * 右侧计分板（display 包）：标题与行来自 scoreboard.yml。
+     * 右侧计分板（display 包）：标题与行来自 display.yml 的 scoreboard 段。
      */
     private void setupScoreboard() {
-        if (!configManager.scoreboard().isEnabled()) return;
+        if (!configManager.display().isScoreboardEnabled()) return;
         scoreboardManager = new ScoreboardManager(this, configManager);
         Bukkit.getPluginManager().registerEvents(scoreboardManager, this);
     }
@@ -392,7 +400,7 @@ public final class SfpMain extends JavaPlugin {
     /**
      * 处罚系统：定时封禁 / 禁言 / 踢出 / 警告。
      * <p>
-     * 数据存独立的 {@code punish.db}；命令在 {@link #registerCommands()} 里统一注册。
+     * 数据存独立的 {@code data/punish.db}（旧版根目录自动迁移）；命令在 {@link #registerCommands()} 里统一注册。
      * 「惰性到期判定」靠 {@link PunishListener} 挂在进服 / 发言 / 查询时机上，不轮询。
      */
     private void setupPunish() {
@@ -434,10 +442,12 @@ public final class SfpMain extends JavaPlugin {
     }
 
     /**
-     * 假人（/bot）：创建真玩家实体用于保持区块加载。
+     * 假人（{@code /sfp player} / {@code /sfp fp}）：创建真玩家实体，可保区块加载、
+     * 挂机攻击/挖掘/钓鱼，详见 bot 包。
      * <p>
      * 假人的重建放在下一 tick 而不是 onEnable 里同步做：加入玩家会触发服务端的一整套
      * 加入流程，让它在插件启用栈之外执行更稳妥（此时世界已加载完毕，满足重建条件）。
+     * 持续动作的周期任务立即启动（此时 bots.yml 已读进内存，任务会自然跳过未加入的假人）。
      */
     private void setupBot() {
         if (!configManager.bot().isEnabled()) {
@@ -445,8 +455,10 @@ public final class SfpMain extends JavaPlugin {
             return;
         }
         botManager = new BotManager(this, configManager);
+        botManager.startActions();
+        getServer().getPluginManager().registerEvents(new cn.starfallplain.sfpmain.bot.BotListener(this), this);
         getServer().getScheduler().runTask(this, () -> botManager.restoreOnStart());
-        getLogger().info("假人系统已启动（/bot create <名字>）。");
+        getLogger().info("假人系统已启动（/sfp player spawn <名字>）。");
     }
 
     private void setupPlaceholders(boolean papiOk) {
@@ -459,6 +471,10 @@ public final class SfpMain extends JavaPlugin {
         if (floorCleanManager != null) {
             new CleanTimePlaceholder(this).register();
             getLogger().info("PlaceholderAPI 占位符 %stf_cleantime% 注册成功！");
+        }
+        if (botManager != null) {
+            new cn.starfallplain.sfpmain.bot.BotPlaceholders(this).register();
+            getLogger().info("PlaceholderAPI 占位符 %fakeplayer_total% 等注册成功！");
         }
     }
 
@@ -504,8 +520,12 @@ public final class SfpMain extends JavaPlugin {
         return floorCleanManager;
     }
 
-    public ChairManager getChairManager() {
-        return chairManager;
+    public SweepExceptionStore getSweepExceptionStore() {
+        return sweepExceptionStore;
+    }
+
+    public ChainManager getChainManager() {
+        return chainManager;
     }
 
     public TrashBinManager getTrashBinManager() {

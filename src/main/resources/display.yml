@@ -1,0 +1,25 @@
+# Tab 列表与右侧计分板的合并配置
+tab:
+  enabled: true
+  refresh-ticks: 20
+  header:
+    - "<rainbow>星落平原-原版服</rainbow>"
+    - "<gray>在线 <white>{online}</white> <dark_gray>/</dark_gray> <white>{max}</white></gray>"
+  footer:
+    - "<gray>TPS  <green>{tps}</green></gray>"
+    - "<gray>MSPT <green>{mspt}</green></gray>"
+
+scoreboard:
+  enabled: true
+  refresh-ticks: 20
+  title: "<gradient:#00d2ff:#3a7bd5><b>星落平原</b></gradient> <dark_gray>·</dark_gray> <white>原版服</white>"
+  lines:
+    - "<dark_gray>-------------------------"
+    - "<gray>玩家 <dark_gray>»</dark_gray> <white>{player}</white>"
+    - "<gray>世界 <dark_gray>»</dark_gray> <aqua>{world}</aqua>"
+    - "<gray>坐标 <dark_gray>»</dark_gray> <yellow>{x}</yellow><dark_gray>,</dark_gray> <yellow>{y}</yellow><dark_gray>,</dark_gray> <yellow>{z}</yellow>"
+    - "<gray>在线 <dark_gray>»</dark_gray> <green>{online}</green><dark_gray>/</dark_gray><gray>{max}</gray>"
+    - ""
+    - "<dark_gray>-------------------------"
+    - ""
+    - "<gradient:#00d2ff:#3a7bd5>» 祝你游玩愉快 «</gradient>"

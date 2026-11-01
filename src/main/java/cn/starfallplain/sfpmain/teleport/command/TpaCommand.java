@@ -23,7 +23,7 @@ import java.util.Map;
  * 注意「接受 / 拒绝」也做成命令而不是纯界面回调：聊天 TUI 的按钮、弹窗界面的按钮、手动输入
  * 三条路径最终都落到这两个命令上，行为完全一致，也不会出现「界面按钮坏了就彻底没法响应」的情况。
  * <p>
- * {@code /tpaui} 切换「回应界面」形式（弹窗 / 聊天按钮），偏好存 settings.db；
+ * {@code /tpaui} 切换「回应界面」形式（弹窗 / 聊天按钮），偏好存 data/settings.db（旧版根目录自动迁移）；
  * 回应界面里的「切换界面」按钮执行的就是它。
  */
 public class TpaCommand implements BasicCommand {

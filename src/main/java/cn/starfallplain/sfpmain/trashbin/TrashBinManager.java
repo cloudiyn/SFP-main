@@ -2,6 +2,7 @@ package cn.starfallplain.sfpmain.trashbin;
 
 import cn.starfallplain.sfpmain.config.ConfigManager;
 import cn.starfallplain.sfpmain.config.module.TrashBinConfig;
+import cn.starfallplain.sfpmain.util.DatabaseFileResolver;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.inventory.ItemStack;
@@ -45,10 +46,7 @@ public class TrashBinManager {
 
     @SuppressWarnings("unchecked")
     private void loadData() {
-        if (!plugin.getDataFolder().exists()) {
-            plugin.getDataFolder().mkdirs();
-        }
-        dataFile = new File(plugin.getDataFolder(), "trashbin-data.yml");
+        dataFile = DatabaseFileResolver.resolveDataFile(plugin, "trashbin-data.yml");
         if (!dataFile.exists()) {
             try {
                 dataFile.createNewFile();

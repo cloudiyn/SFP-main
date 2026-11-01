@@ -189,7 +189,7 @@ public final class TpaManager {
                 .action(DialogAction.staticAction(ClickEvent.runCommand("/tpdeny " + from.getName())))
                 .build();
 
-        // 第三个按钮：切换回应界面形式（dialog ↔ tui），偏好存 settings.db
+        // 第三个按钮：切换回应界面形式（dialog ↔ tui），偏好存 data/settings.db（旧版根目录自动迁移）
         ActionButton switchBtn = ActionButton.builder(
                         Messages.deserialize(messages.raw("tpa.dialog-switch", "<!i><yellow>切换界面</yellow>")))
                 .tooltip(Messages.deserialize(messages.raw("tpa.dialog-switch-hover",
@@ -269,7 +269,7 @@ public final class TpaManager {
     }
 
     /**
-     * 切换「传送回应界面」形式（dialog ↔ tui），偏好存 settings.db。
+     * 切换「传送回应界面」形式（dialog ↔ tui），偏好存 data/settings.db（旧版根目录自动迁移）。
      * <p>
      * 若该玩家当前正好有一笔待处理的请求，会立刻用新形式重新发一遍
      * （弹窗里的「切换界面」按钮、聊天里的「[切换为弹窗]」都走这里）。

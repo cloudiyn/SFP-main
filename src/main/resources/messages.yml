@@ -16,6 +16,12 @@ common:
   reload-success: "<green>[星落平原] 配置已重载。</green>"
   reload-failed: "<red>[星落平原] 重载失败。</red>"
   unknown-subcommand: "<red>未知子命令，输入 /sfp 查看用法。</red>"
+  # 未知子命令的详细提示：{input} 为原样输入，{command} 为建议写法 / 用法入口
+  unknown-subcommand-input: "<red>未知子命令：</red><white>{input}</white>"
+  unknown-subcommand-suggest: "<gray>你是不是想输入 </gray><white>{command}</white><gray>？</gray>"
+  unknown-subcommand-hint: "<gray>输入 </gray><white>{command}</white><gray> 查看完整用法。</gray>"
+  # 无权限提示（带权限节点），{permission} 为缺少的权限
+  no-permission-with-node: "<red>你没有权限使用此命令（需要 {permission}）。</red>"
   # 子界面（垃圾桶 / 家列表 / 传送点列表）导航行里的返回按钮
   back-to-menu: "<!i><yellow>返回主菜单</yellow>"
 
@@ -29,6 +35,24 @@ clean:
   # 不进入垃圾桶、直接删除时的提示
   result-deleted: "<!i><green>[扫地] 已清理 {count} 个掉落物。</green> <gray>下次清扫将在 {time} 后。</gray>"
   result-button-hover: "<!i><gray>点击打开垃圾桶取回物品</gray>"
+  # 扫地管理命令提示
+  enabled: "<green>自动扫地已开启。</green>"
+  disabled: "<yellow>自动扫地已关闭。</yellow>"
+  database-error: "<red>扫地管理数据库不可用。</red>"
+  world-not-found: "<red>找不到世界：{world}</red>"
+  invalid-coordinate: "<red>区块坐标必须是整数。</red>"
+  exception-added: "<green>已添加例外区块 {world} {x} {z}。</green>"
+  exception-removed: "<green>已移除例外区块 {world} {x} {z}。</green>"
+  exception-unchanged: "<yellow>该例外区块状态未改变。</yellow>"
+
+# ---------- 连锁挖矿（chain 包）----------
+chain:
+  # 连锁成功的提示，{count} 为额外挖掉的方块数，{food} 为本次扣除的饱食度
+  broken: "<green>连锁挖矿：额外挖掉 <white>{count}</white> 块 <gray>(-{food} 饱食度)</gray>。</green>"
+  # 饱食度不足以支付全额时的部分生效提示
+  partial: "<gray>饱食度只够连锁 {count} 块，本次连锁部分生效。</gray>"
+  # 一点都扣不出时的提示（此时不连锁，只挖玩家亲手挖的第一块）
+  not-enough-food: "<red>饱食度不足，无法连锁挖矿。</red>"
 
 # ---------- 垃圾桶（trashbin 包）----------
 trashbin:
@@ -44,11 +68,6 @@ trashbin:
     - "<!i><gray>点击物品即可取回</gray>"
   taken: "<green>已从垃圾桶取回物品。</green>"
   disabled: "<red>垃圾桶系统未启用。</red>"
-
-# ---------- 椅子（chair 包）----------
-chair:
-  sit: "<green>你坐下了。潜行或再次右键座位可以站起来。</green>"
-  occupied: "<yellow>这个座位已经有人了！</yellow>"
 
 # ---------- 传送通用（teleport 包）----------
 teleport:
@@ -146,7 +165,7 @@ tpa:
   # 否则会出现「配置里的命令模板」与「代码挂的命令」两份，容易误以为占位符没被替换。
   tui-accept: "<!i><green>[接受]</green>"
   tui-deny: "<!i><red>[拒绝]</red>"
-  # 回应界面里的「切换界面形式」按钮（偏好存 settings.db，切换后立即用新形式重发当前请求）
+  # 回应界面里的「切换界面形式」按钮（偏好存 data/settings.db，旧版根目录自动迁移）
   dialog-switch: "<!i><yellow>切换界面</yellow>"
   dialog-switch-hover: "<!i><gray>改用聊天里的按钮来回应</gray>"
   tui-switch: "<!i><yellow>[切换为弹窗]</yellow>"
@@ -190,24 +209,149 @@ tpa:
     - "<!i><green>左键</green><gray> 请求传送到他身边</gray>"
     - "<!i><red>右键</red><gray> 请求他传送到你身边</gray>"
 
-# ---------- 假人（/bot）----------
+# ---------- 假人（/sfp player / /sfp fp）----------
 bot:
+  # 用法：/sfp player 不带参数时逐行发送
+  usage:
+    - "<dark_gray>========== /sfp player 用法 ==========</dark_gray>"
+    - "<dark_gray>权限：sfpmenu.bot（killall 另需 sfpmenu.bot.killall）；全称 /sfp player，简写 /sfp fp</dark_gray>"
+    - "<white>help</white> <dark_gray>显示本用法（不带子命令同效）</dark_gray>"
+    - "<white>spawn <名字> [世界 x y z]</white> <dark_gray>创建假人（省略坐标 = 当前位置）</dark_gray>"
+    - "<white>kill [名字] / killall</white> <dark_gray>移除假人 / 移除全部（killall 需 sfpmenu.bot.killall）</dark_gray>"
+    - "<white>list</white> <dark_gray>列出全部假人</dark_gray>"
+    - "<white>select <名字> / selection</white> <dark_gray>设定 / 查看默认假人（之后可省略名字）</dark_gray>"
+    - "<white>status [名字]</white> <dark_gray>状态：生命 / 饱食度 / 位置 / 设置 / 动作</dark_gray>"
+    - "<white>distance [名字]</white> <dark_gray>与假人的距离</dark_gray>"
+    - "<white>invsee [名字]</white> <dark_gray>打开假人背包（右键假人同效）</dark_gray>"
+    - "<white>skin <玩家名> [名字]</white> <dark_gray>复制某玩家的皮肤</dark_gray>"
+    - "<white>respawn [名字]</white> <dark_gray>复活死亡的假人</dark_gray>"
+    - "<white>tp [名字] / tphere / tps</white> <dark_gray>传到假人处 / 拉过来 / 交换位置</dark_gray>"
+    - "<white>expme [名字]</white> <dark_gray>把假人的经验转给自己</dark_gray>"
+    - "<white>cmd [名字] <命令...></white> <dark_gray>以假人身份执行命令</dark_gray>"
+    - "<white>drop / dropstack / dropinv [名字]</white> <dark_gray>丢手持 1 个 / 整叠 / 整个背包</dark_gray>"
+    - "<white>swap [名字] / hold <1-9> [名字]</white> <dark_gray>主副手互换 / 切换快捷栏</dark_gray>"
+    - "<white>set [名字] <键> <true|false></white> <dark_gray>改假人设置</dark_gray>"
+    - "<white>config list|set <键> <值>|clear</white> <dark_gray>个人默认配置（创建时套用）</dark_gray>"
+    - "<white>attack / mine / use / move [名字]</white> <dark_gray>持续：攻击 / 挖掘 / 使用 / 移动</dark_gray>"
+    - "<white>jump [名字]</white> <dark_gray>跳一次</dark_gray>"
+    - "<white>sneak / sprint [名字] [on|off]</white> <dark_gray>潜行 / 疾跑（省略 on|off 为切换）</dark_gray>"
+    - "<white>look [名字] [x y z] / turn [名字] <度数></white> <dark_gray>看向坐标（缺省看你）/ 原地转向</dark_gray>"
+    - "<white>ride [名字]</white> <dark_gray>骑上面前的实体（再执行一次下车）</dark_gray>"
+    - "<white>sleep / wakeup [名字]</white> <dark_gray>睡觉 / 起床</dark_gray>"
+    - "<white>stop [名字]</white> <dark_gray>停止全部持续动作</dark_gray>"
+    - "<dark_gray>设置键：collidable invulnerable wolverine look_at_entity pickup_items replenish autofish skin</dark_gray>"
+    - "<dark_gray>省略 [名字] 时使用默认假人（用 /sfp player select <名字> 设定）；未知子命令会提示最接近的写法</dark_gray>"
   created: "<green>已创建假人「{name}」（{location}），它会保持所在区块加载。</green>"
   removed: "<green>已移除假人「{name}」。</green>"
   removed-all: "<green>已移除全部假人（{count} 个）。</green>"
   not-found: "<red>不存在名为「{name}」的假人。</red>"
   exists: "<red>已存在名为「{name}」的假人。</red>"
   invalid-name: "<red>假人名字只能包含字母、数字、下划线，长度 1~{max}。</red>"
-  limit-reached: "<red>你创建的假人已达上限（{max} 个），可先用 /bot remove 删掉一些。</red>"
+  limit-reached: "<red>你创建的假人已达上限（{max} 个）。</red>"
   create-failed: "<red>创建假人失败：{error}</red>"
   world-not-found: "<red>找不到世界「{world}」。</red>"
   bad-coords: "<red>坐标格式不正确，应为数字。</red>"
   # 只给了世界或坐标的一部分时（既不是「只有名字」也不是「名字 + 世界 + x y z」）
-  usage-coords: "<red>坐标要么不写，要么写全：/bot create <名字> <世界> <x> <y> <z></red>"
-  need-coords: "<red>控制台执行时必须给出坐标：/bot create <名字> <世界> <x> <y> <z></red>"
+  usage-coords: "<red>坐标要么不写，要么写全：/sfp player spawn <名字> <世界> <x> <y> <z></red>"
+  need-coords: "<red>控制台执行时必须给出坐标：/sfp player spawn <名字> <世界> <x> <y> <z></red>"
+  spawn-usage: "<red>用法：/sfp player spawn <名字> [世界 x y z]</red>"
   list-header: "<aqua>假人（{count}）：</aqua>"
   list-empty: "<yellow>当前没有假人。</yellow>"
-  list-entry: "<gray> - </gray><white>{name}</white> <dark_gray>({world} {x}, {y}, {z}) {state}</dark_gray>"
+  list-entry: "<gray> - </gray><white>{name}</white> <dark_gray>({world} {x}, {y}, {z}) {state} [动作：{actions}]</dark_gray>"
+  # 选择
+  selected: "<green>已把「{name}」设为默认假人，之后的命令可以省略名字。</green>"
+  select-usage: "<red>用法：/sfp player select <名字></red>"
+  select-player-only: "<red>只有玩家可以设定默认假人（控制台请每次显式写名字）。</red>"
+  selection-none: "<gray>当前没有选定的假人。</gray>"
+  selection-current: "<gray>当前默认假人：<white>{name}</white></gray>"
+  no-selection: "<red>请指定假人名，或先用 <white>/sfp player select <名字></white> 设定默认假人。</red>"
+  # 状态 / 距离
+  status-header: "<aqua>假人「{name}」[{state}]</aqua>"
+  status-offline: "<gray>记录位置：{world} {x}, {y}, {z}（重启后按此位置重建）</gray>"
+  status-online: "<gray>位置：{world} {x}, {y}, {z}　生命：{health}　饱食度：{food}　模式：{gamemode}</gray>"
+  status-actions: "<gray>持续动作：{actions}</gray>"
+  status-settings-header: "<gray>设置：</gray>"
+  status-settings-entry: "<dark_gray>  · </dark_gray><white>{display}</white><gray>（{key}）：{value}</gray>"
+  status-owner: "<gray>创建者：{owner}</gray>"
+  distance: "<gray>与假人「{name}」的距离：<white>{distance}</white> 格</gray>"
+  distance-other-world: "<yellow>假人「{name}」在另一个世界（{world}）。</yellow>"
+  offline: "<red>假人「{name}」当前不在线。</red>"
+  player-only: "<red>该操作只能由玩家执行。</red>"
+  # 背包 / 物品
+  inventory-title: "<!i><dark_gray>假人背包 · {name}</dark_gray>"
+  inventory-locked: "<!i><dark_gray>不可编辑区域</dark_gray>"
+  inventory-storage: "<!i><yellow>上方 36 格：快捷栏（0~8）与储物格（9~35）；底排 45/46 为主手/副手</yellow>"
+  inventory-main-hand: "<!i><gold>主手：下方槽位（实时映射当前快捷栏槽位）</gold>"
+  inventory-off-hand: "<!i><aqua>副手：下方槽位</aqua>"
+  inventory-help: "<!i><yellow>背包编辑说明</yellow>"
+  inventory-help-lore:
+    - "<!i><gray>左键整叠，右键拆分或放置一个。</gray>"
+    - "<!i><gray>Shift 在双方储物格间移动，数字键交换快捷栏。</gray>"
+    - "<!i><gray>F 键交换你自己的副手；主手格与快捷栏共享同一物品。</gray>"
+    - "<!i><gray>为避免复制或误丢，拖拽、双击收集、克隆、丢弃均禁用。</gray>"
+    - "<!i><gray>需丢弃时请先取回自己的背包，关闭界面后再丢弃。</gray>"
+    - "<!i><gray>修改即时生效；假人离线或死亡将关闭界面。</gray>"
+  inventory-close: "<!i><red>关闭背包</red>"
+  inventory-unavailable: "<yellow>假人「{name}」的背包当前不可编辑，界面已关闭。</yellow>"
+  inventory-unsupported: "<yellow>此界面不支持拖拽、双击收集、克隆或丢弃，请使用普通点击、Shift 或数字键。</yellow>"
+  drop-empty: "<yellow>假人「{name}」手上没有物品。</yellow>"
+  dropped: "<green>假人「{name}」丢出了 1 个物品。</green>"
+  dropped-stack: "<green>假人「{name}」丢出了整叠物品。</green>"
+  dropped-inv: "<green>假人「{name}」丢出了整个背包（{count} 个物品）。</green>"
+  swapped: "<green>假人「{name}」已互换主副手物品。</green>"
+  held: "<green>假人「{name}」已切到快捷栏第 {slot} 格。</green>"
+  hold-usage: "<red>用法：/sfp player hold <1-9> [假人名]</red>"
+  # 传送 / 经验 / 命令
+  teleported-to: "<green>已传送到假人「{name}」身边。</green>"
+  teleported-here: "<green>已把假人「{name}」传到身边。</green>"
+  teleported-swap: "<green>已与假人「{name}」交换位置。</green>"
+  exp-none: "<yellow>假人「{name}」没有经验可转移。</yellow>"
+  exp-transferred: "<green>已把假人「{name}」的 {amount} 点经验转给你。</green>"
+  cmd-empty: "<red>要执行的命令不能为空。</red>"
+  cmd-done: "<green>已让假人「{name}」执行命令：/{command}</green>"
+  cmd-failed: "<red>假人「{name}」执行命令失败（可能没有权限或命令不存在）：/{command}</red>"
+  cmd-usage: "<red>用法：/sfp player cmd [名字] <命令...>（假人需有对应权限，可用 /op 给它提权）</red>"
+  # 皮肤
+  skin-usage: "<red>用法：/sfp player skin <玩家名> [假人名]</red>"
+  skin-not-found: "<red>找不到玩家「{name}」的皮肤（离线玩家需要服务器能访问 Mojang 皮肤服务器）。</red>"
+  skin-failed: "<red>设置皮肤失败：{error}</red>"
+  skin-copied: "<green>假人「{name}」已套用「{source}」的皮肤。</green>"
+  # 设置
+  set-usage: "<red>用法：/sfp player set [名字] <键> <true|false>，可用键：collidable / invulnerable / wolverine / look_at_entity / pickup_items / replenish / autofish / skin</red>"
+  set-done: "<green>假人「{name}」的「{display}」已设为 {value}。</green>"
+  config-header: "<aqua>你的假人默认配置（创建新假人时套用）：</aqua>"
+  config-entry: "<dark_gray>  · </dark_gray><white>{display}</white><gray>（{key}）：{value}<dark_gray>（{origin}）</dark_gray></gray>"
+  config-player-only: "<red>个人配置按玩家保存，控制台无法使用（控制台创建的假人用全局默认设置）。</red>"
+  config-set-done: "<green>你的默认配置「{display}」已设为 {value}（下次创建假人时生效）。</green>"
+  config-cleared: "<green>已清空你的个人配置（恢复全局默认）。</green>"
+  config-clear-none: "<yellow>你还没有个人配置。</yellow>"
+  config-usage: "<red>用法：/sfp player config list|set <键> <true|false>|clear</red>"
+  config-set-usage: "<red>用法：/sfp player config set <键> <true|false></red>"
+  # 持续动作
+  action-toggled: "<green>假人「{name}」{state}{display}。</green>"
+  action-none: "<gray>假人「{name}」当前没有持续动作。</gray>"
+  action-stopped: "<green>假人「{name}」已停止全部持续动作。</green>"
+  action-failed: "<red>动作执行失败，请查看服务器日志。</red>"
+  # 一次性动作
+  jump: "<green>假人「{name}」跳了一下。</green>"
+  sneak-toggled: "<green>假人「{name}」{state}潜行。</green>"
+  sneak-usage: "<red>用法：/sfp player sneak [名字] [on|off]（省略 on|off 为切换）</red>"
+  sprint-toggled: "<green>假人「{name}」{state}疾跑。</green>"
+  sprint-usage: "<red>用法：/sfp player sprint [名字] [on|off]（省略 on|off 为切换）</red>"
+  looked: "<green>假人「{name}」已转向目标。</green>"
+  look-usage: "<red>用法：/sfp player look [名字] <x> <y> <z>（省略坐标则看向你；控制台必须给坐标）</red>"
+  turned: "<green>假人「{name}」已转向 {degrees} 度。</green>"
+  turn-usage: "<red>用法：/sfp player turn [假人名] <度数>（正数右转）</red>"
+  ridden: "<green>假人「{name}」已骑上面前的实体。</green>"
+  dismounted: "<green>假人「{name}」已下车。</green>"
+  ride-none: "<yellow>假人「{name}」面前没有可骑乘的实体（再执行一次可下车）。</yellow>"
+  ride-failed: "<red>骑乘失败（该实体可能不允许骑乘）。</red>"
+  sleep: "<green>假人「{name}」已躺下睡觉。</green>"
+  wakeup: "<green>假人「{name}」已起床。</green>"
+  # 复活
+  respawned: "<green>已复活假人「{name}」。</green>"
+  respawn-alive: "<yellow>假人「{name}」还活着，不需要复活。</yellow>"
+  respawn-failed: "<red>复活失败（可能服务端在假人死亡时已将其踢出，需重新 spawn）。</red>"
 
 # ---------- 界面样式切换（/menuui）----------
 menuui:

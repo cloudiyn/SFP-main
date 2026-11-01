@@ -1,5 +1,6 @@
 package cn.starfallplain.sfpmain.ui;
 
+import cn.starfallplain.sfpmain.util.DatabaseFileResolver;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
@@ -12,7 +13,7 @@ import java.sql.Statement;
 import java.util.UUID;
 
 /**
- * 玩家界面偏好存储（{@code settings.db} 的 {@code ui_preferences} 表）。
+ * 玩家界面偏好存储（{@code data/settings.db} 的 {@code ui_preferences} 表）。旧版根目录文件会自动迁移。
  * <p>
  * 独立于传送数据库（{@code teleport.db}）：界面偏好不属于传送域，且传送模块关闭时
  * 偏好仍要可用，所以这里自建一个极简的连接与建表，不复用传送的 {@code Database}。
@@ -28,7 +29,7 @@ public final class UiPreferenceStore {
         this.plugin = plugin;
         try {
             Class.forName("org.sqlite.JDBC");
-            File file = new File(plugin.getDataFolder(), "settings.db");
+            File file = DatabaseFileResolver.resolve(plugin, "settings.db", "settings.db");
             connection = DriverManager.getConnection("jdbc:sqlite:" + file.getAbsolutePath());
             try (Statement st = connection.createStatement()) {
                 st.execute("PRAGMA journal_mode = WAL");

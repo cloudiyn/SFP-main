@@ -19,3 +19,6 @@ dependency-reduced-pom.xml
 # Python（scripts/ 下的检查脚本）
 __pycache__/
 *.pyc
+
+# 本地发布的 jar 包
+dist/*.jar

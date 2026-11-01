@@ -6,7 +6,7 @@
 
     <groupId>cn.starfallplain</groupId>
     <artifactId>sfp-main</artifactId>
-    <version>2.11.0</version>
+    <version>2.16.1</version>
     <packaging>jar</packaging>
 
     <name>sfp-main</name>

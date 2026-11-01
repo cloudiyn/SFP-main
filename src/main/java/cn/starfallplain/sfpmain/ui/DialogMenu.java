@@ -76,7 +76,7 @@ public final class DialogMenu {
                 builder.tooltip(tooltip);
             }
             if (action == null) {
-                // 说明性按钮（例如介绍告示牌椅子）：与箱子 UI 一样显示出来，但点击不做事
+                // 说明性按钮与箱子 UI 一样显示出来，但点击不做事
                 buttons.add(builder.action(DialogAction.customClick((view, audience) -> {
                     // 空回调：仅占位，保持两种界面的按钮集合一致
                 }, options)).build());

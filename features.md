@@ -11,7 +11,7 @@
 - 插件名（`name`）：`SFP-main` —— 决定日志前缀与数据目录（`plugins/SFP-main/`）
 - 主类：`cn.starfallplain.sfpmain.SfpMain`（包名 `cn.starfallplain.sfpmain`、主类 `SfpMain`）
 - 元信息文件：`src/main/resources/paper-plugin.yml`（`version` 由 `${version}` 过滤）
-- 当前版本：**2.11.0**（2.11.0 是一轮「自检修复」：传送粒子间隔 `particle-interval-ticks` 与延迟传送预加载真正生效、`/home` `/warp` 无参按界面偏好分流、处罚音效恢复播放、主菜单按钮上移一行、dialogUI 补齐说明按钮与全部文案外置、代码里的中文全部搬进 messages.yml，并删掉 `clean.skip-named-items` 与 `punish.messages.join-warn-notice` 两个死键；2.10.2 修复鞘翅兑换提示把 MiniMessage 标签当字面量打印的问题，价格改为 64 钻石或 8 下界残骸二选一；2.10.1 修复跨服被封禁玩家卡在「加载地形中」；2.10.0 主菜单新增「鞘翅兑换」按钮；2.9.1 新增「仅处罚」工作模式；2.9.0 菜单新增「随机传送」按钮；2.8.0 处罚数据库位置可配置；2.7.0 新增处罚系统）
+- 当前版本：**2.16.1**（2.16.1 修复假人攻击：根因是假人不被 tick 驱动、`attackStrengthTicker` 冻结在 0.1，用 `chargeAttack` 顶满充能并自计时攻击间隔（原 `getAttackCooldown() >= 0.95` 门槛导致一次都打不出）；不再跳过盔甲架（同一动作周期连打两次，对应原版 5 tick 内两下才碎）、攻击前按脚下方块校正 NMS `onGround`，让主手是剑时恢复原版横扫；同时优化命令提示：未知子命令先回显输入并给相似建议、缺参/非法参数给完整用法、无权限提示带权限节点、新增 `/sfp player help`、修正补全，详见 [§0.6](#06-命令提示与补全)；2.16.0 右键假人背包改成可编辑的物品栏界面（主手/副手实时可改）；`use` 动作按主手→副手依次尝试，物品耗尽时按手持物品类型从背包补货；新增拾取白名单 `pickup-whitelist`，空列表维持全部拾取；2.15.1 修复假人启用 `pickup_items` 后不拾取掉落物：动作循环扫描周围掉落物并调用原版拾取流程；2.15.0 新增 `/sfp sweep on/off` 开关及 SQLite 持久化区块例外；2.13.0 新增连锁挖矿：蹲下挖矿时按同种矿脉 BFS 连锁（上限 32 块），每块扣 0.1 饱食度，逐块走原版 `BlockBreakEvent` 以兼容领地保护，假人不参与连锁；2.12.0 把假人重做成 minecraft-fakeplayer 的效果：命令改为 `/sfp player`（简写 `/sfp fp`），新增选择 / 背包 / 设置 / 肤色 / 传送 / 经验 / 以假人身份执行命令 / 丢物品 / 交换手 / 快捷栏，以及**持续动作** attack·mine·use·move 与一次性动作 jump·sneak·sprint·look·turn·ride·sleep·wakeup·stop，右键假人开背包，个人默认配置与 PAPI 占位符；2.11.0 是一轮「自检修复」：传送粒子间隔 `particle-interval-ticks` 与延迟传送预加载真正生效、`/home` `/warp` 无参按界面偏好分流、处罚音效恢复播放、主菜单按钮上移一行、dialogUI 补齐说明按钮与全部文案外置、代码里的中文全部搬进 messages.yml，并删掉 `clean.skip-named-items` 与 `punish.messages.join-warn-notice` 两个死键；2.10.2 修复鞘翅兑换提示把 MiniMessage 标签当字面量打印的问题，价格改为 64 钻石或 8 下界残骸二选一；2.10.1 修复跨服被封禁玩家卡在「加载地形中」；2.10.0 主菜单新增「鞘翅兑换」按钮；2.9.1 新增「仅处罚」工作模式；2.9.0 菜单新增「随机传送」按钮；2.8.0 处罚数据库位置可配置；2.7.0 新增处罚系统）
 
 ---
 
@@ -26,7 +26,7 @@
 
 `punish-only` 专为**群组服**设计 —— 子服只负责执行处罚命令，不需要重复跑菜单与传送。
 
-该模式下**不装配**的模块：菜单 / 菜单钟 / 自动扫地 / 垃圾桶 / 椅子 / 传送（含 tpa / rtp）/
+该模式下**不装配**的模块：菜单 / 菜单钟 / 自动扫地 / 垃圾桶 / 传送（含 tpa / rtp）/
 假人 / Tab / 计分板 / 界面偏好库。具体表现为：
 
 1. `SfpMain#onEnable` **跳过**上面对应的 `setupXxx()` 调用（不建数据库、不注册监听器、
@@ -43,23 +43,24 @@
 （`/sfp reload` 只重载参数，不改变装配结果）。
 
 > 群组服共用同一个处罚库：把各子服 `punish.yml` 的 `database.file` 指向同一绝对路径
-> （如挂载盘位置），详见 §8.3。
+> （如挂载盘位置），详见 §9.3。
 
 ### 0.1 启动流程（`SfpMain#onEnable`）
 
 ```
 1) configManager = new ConfigManager(this)
      └─ 读 config.yml（GlobalConfig，走 Bukkit 的 getConfig）+ messages.yml（Messages）
-     └─ loadAll()：依次 new 出 Menu/Clean/TrashBin/Chair/Teleport/Bot 六个 Config
+     └─ loadAll()：依次 new 出 Menu/Clean/TrashBin/Teleport/Bot 五个 Config
         （每个 Config 构造时就 load() → onLoaded()，把 yml 的值缓存成字段）
 2) 按开关装配模块（顺序有意义）：
      ★ punish-only 模式下跳过以下全部 setup，只留 setupPunish()
      setupTrashBin()     垃圾桶必须先于扫地（扫地要把物品塞进垃圾桶）
      setupFloorClean()   扫地：new FloorCleanManager（内部 runTaskTimer 每秒 tick）
-     setupChair()        椅子：new ChairManager + 注册 ChairListener
+     setupChain()        连锁挖矿：new ChainManager + 注册 ChainListener（只有监听器，无定时任务）
      setupTeleport()     传送：new TeleportManager（内含 SQLite）→ new TpaManager
                          → 注册 TeleportListener / TeleportGuiListener / TpaListener
-     setupBot()          假人：new BotManager，并 runTask 延后一 tick 执行 restoreOnStart()
+     setupBot()          假人：new BotManager（读 bots.yml）→ startActions()（4 tick 动作任务 +
+                         1 tick 移动任务）→ 注册 BotListener → runTask 延后一 tick 执行 restoreOnStart()
      setupMenu()         菜单：注册 MenuListener（菜单本身是懒构建的，无状态）
      setupMenuClock()    菜单钟：注册合成配方 + MenuClockListener + MenuClockJoinListener（依赖主菜单已启用）
      setupPunish()       处罚：new PunishManager（内含独立 SQLite punish.db）→ 注册 PunishListener
@@ -79,12 +80,11 @@
 | `config.yml` | `GlobalConfig` | 全局：`mode`（工作模式）、`debug`。**不继承 AbstractConfig**，直接走 `plugin.getConfig()` |
 | `menu.yml` | `MenuConfig` | 主菜单标题/尺寸/边框/按钮 + 菜单钟（`menu-clock`）+ 鞘翅兑换（`elytra-exchange`） |
 | `clean.yml` | `CleanConfig` | 自动扫地 |
+| `chain.yml` | `ChainConfig` | 连锁挖矿（触发条件 / 连锁上限 / 饱食度费率 / 收录方块） |
 | `trashbin.yml` | `TrashBinConfig` | 垃圾桶 |
-| `chair.yml` | `ChairConfig` | 椅子 |
 | `teleport.yml` | `TeleportConfig` | 传送（back/home/warp/tpa/rtp + 数据库） |
 | `bot.yml` | `BotConfig` | 假人 |
-| `tab.yml` | `TabConfig` | Tab 列表头部/底部（display 包） |
-| `scoreboard.yml` | `ScoreboardConfig` | 计分板（display 包） |
+| `display.yml` | `DisplayConfig` | 信息显示：`tab`（列表头部/底部）+ `scoreboard`（标题/行）两段合并（display 包） |
 | `punish.yml` | `PunishConfig` | 处罚系统（封禁/禁言/踢出/警告 + 数据库 + 全部处罚文案） |
 | `messages.yml` | `Messages` | 所有面向玩家的文案（**不继承 AbstractConfig**） |
 
@@ -121,8 +121,9 @@ Paper 插件不支持 `plugin.yml` 的 `commands` 段，全部命令在
 - 模块被关闭时同名命令**仍然注册**，统一回「该功能当前未启用」，避免玩家以为命令不存在。
 
 已注册命令：`menu`(别名 `m`)、`trashbin`、`back`、`rtp`、`home`、`sethome`、`delhome`、`homes`、
-`warp`、`setwarp`、`delwarp`、`warps`、`tpa`、`tpahere`、`tpaccept`、`tpdeny`、`tpaui`、`bot`、
-`menuui`、`sfp`、`sfpcheck`、`sfpwarn`、`sfpkick`、`sfpban`、`sfpmute`、`sfpunban`、`sfpunmute`。
+`warp`、`setwarp`、`delwarp`、`warps`、`tpa`、`tpahere`、`tpaccept`、`tpdeny`、`tpaui`、
+`menuui`、`sfp`（假人命令是它的子命令 `/sfp player` / `/sfp fp`，见第 6 节）、
+`sfpcheck`、`sfpwarn`、`sfpkick`、`sfpban`、`sfpmute`、`sfpunban`、`sfpunmute`。
 
 ### 0.4 权限节点（`paper-plugin.yml` 的 `permissions` 段）
 
@@ -134,7 +135,9 @@ Paper 插件不支持 `plugin.yml` 的 `commands` 段，全部命令在
 | `sfpmenu.warp.set` | op | `/setwarp`（也可在 teleport.yml 改空=人人可建） |
 | `sfpmenu.warp.delete` | op | `/delwarp` |
 | `sfpmenu.admin` | op | `/sfp`（reload / status / db / test） |
-| `sfpmenu.bot` | op | `/bot` |
+| `sfpmenu.clean.manage` | op | `/sfp sweep`（开关与例外区块） |
+| `sfpmenu.bot` | op | `/sfp player` / `/sfp fp`（假人全部子命令） |
+| `sfpmenu.bot.killall` | op | `/sfp player killall`（一次移除全部假人） |
 | `sfpmenu.punish.check` | op | `/sfpcheck` 查询处罚记录 |
 | `sfpmenu.punish.warn` | op | `/sfpwarn` 警告 |
 | `sfpmenu.punish.kick` | op | `/sfpkick` 踢出 |
@@ -160,18 +163,35 @@ Paper 插件不支持 `plugin.yml` 的 `commands` 段，全部命令在
 - 动作解析共用 `MenuManager#resolveSlotActions / resolveAction`，
   所以**自检报出的按钮绑定就是玩家实际点击的结果**。
 - 菜单段的 lore 漂移体检：`checkElytraExchange`（鞘翅价格）+ `checkLoreDrift`
-  （随机传送冷却、椅子关键字）—— 见 §1.0 末尾的说明。
+  （随机传送冷却）—— 见 §1.0 末尾的说明。
 
 **2.11.0 补齐的自检项**（此前这些「只能靠真人踩一次」）：
 
 | 检查 | 说明 |
 |---|---|
 | 菜单槽位冲突 | 两个可见按钮抢同一格时 `slotActions` 是 Map，**后一个会静默覆盖前一个** → 报 [错误]；按钮占用 `player-head.slot` 会盖掉顶栏头像 → 报 [注意] |
-| 新增文案键缺失 | 与「关键键」分开查：`mergeDefaults()` 不覆盖老 `messages.yml`，新键（`RECENTLY_ADDED_MESSAGE_KEYS`，目前是 2.11.0 的 `dialogui.*` / `punish.*` / `bot.usage-coords`）缺失时提示手工补键。**必须查磁盘文件**：`Messages#has()` 在 2.11.0 改成只看玩家磁盘上的文件，否则 jar 内置默认文件一带该键就永远返回 true、检查形同虚设 |
+| 新增文案键缺失 | 与「关键键」分开查：`mergeDefaults()` 不覆盖老 `messages.yml`，新键（`RECENTLY_ADDED_MESSAGE_KEYS`，目前是 2.13.0 的 `chain.*`，2.12.0 的整批 `bot.*` 假人文案，以及 2.11.0 的 `dialogui.*` / `punish.*`）缺失时提示手工补键。**必须查磁盘文件**：`Messages#has()` 在 2.11.0 改成只看玩家磁盘上的文件，否则 jar 内置默认文件一带该键就永远返回 true、检查形同虚设 |
 | 失效残留键 | 老配置里若还留着上面两张表里的死键（2.11.0 的 `skip-named-items`、`messages.join-warn-notice`，以及 2.5.0 的 `worlds.only-loaded-chunks`、`trashbin.global`、`stand-on.sneak`、`allow-cross-world`、`currency-name`）→ 逐条列出提示删除 |
+| 连锁挖矿配置体检 | `chain.yml` 的 `blocks` 里每个方块名都拿去 `Material.matchMaterial` 核对（拼错不抛异常，只会让连锁对该矿**静默失效**）；`max-blocks` 上限合理性；`exhaustion-per-block` 为 0 时提示「连锁白嫖」；`require.sneak` / `require.chain-bots` 关掉时提示误伤风险 |
 | 扫地 × 垃圾桶冲突 | `to-trashbin: true` 但 `trashbin.enabled: false` = 清扫物直接销毁且不可取回 → 报 [注意] |
-| 权限节点声明 | 代码里 `hasPermission()` 用到的 14 个 `sfpmenu.*` 是否都在 `paper-plugin.yml` 声明（用 `PluginMeta#getPermissions()` 读）→ 缺了报 [错误]（非 OP 玩家会永远没权限） |
-| 假人记录体检 | `bots.yml` 里假人所在世界是否已加载（不加载则下次启动重建一直失败）；`restore-on-start: false` 也提示一次 |
+| 权限节点声明 | 代码里 `hasPermission()` 用到的 16 个 `sfpmenu.*` 是否都在 `paper-plugin.yml` 声明（用 `PluginMeta#getPermissions()` 读）→ 缺了报 [错误]（非 OP 玩家会永远没权限） |
+| 假人记录体检 | `bots.yml` 里假人所在世界是否已加载（不加载则下次启动重建一直失败）；`restore-on-start: false` 也提示一次；已记录的假人数 / 已加入数 / 带持续动作的假人数一并展示 |
+
+### 0.6 命令提示与补全
+
+**2.16.1 统一改造**（`BotCommand` / `SfpCommand`），入口 `/sfp`、`/sfp db`、`/sfp player`：
+
+| 场景 | 行为 |
+|---|---|
+| 未知子命令 | 先回显「未知子命令：{input}」，再用前缀 + Levenshtein 距离给「你是不是想输入 {command}？」（`closestMatch`，`BotCommand.java:702`，不引第三方库），最后给用法入口；不再整段刷 usage |
+| 缺参 / 非法参数 | 给该子命令自己的完整用法（例如 `/sfp sweep` 参数错只打两行用法，不打印整个 `/sfp` usage） |
+| 无权限 | 优先 `common.no-permission-with-node` 带权限节点（`{permission}`：`sfpmenu.admin` / `sfpmenu.clean.manage` / `sfpmenu.bot` / `sfpmenu.bot.killall`）；磁盘老 `messages.yml` 缺该键时回退旧 `common.no-permission` |
+| `/sfp player help` | 新子命令，等同 `/sfp player`，已并入 `SUBCOMMANDS` 补全 |
+| Tab 补全 | 未知子命令时不补假人名；`help` 第 2 参数为空；`config set` 第 4 参数补 `true/false`；`/sfp player` 的补全转交 `BotCommand#suggest`（`SfpCommand.java:95`） |
+
+用法文案与 `messages.yml` 逐字一致（`hold` / `look` / `turn` / `config` / `config set` 的 fallback 与对应键同一字符串）；`look` 统一带「控制台必须给坐标」；`turn` 写成实际接受的形式 `turn [假人名] <度数>`；`sneak` / `sprint` 给非法开关值时报 `bot.sneak-usage` / `bot.sprint-usage`（此前静默当切换）。
+
+**新增文案键**：`common.no-permission-with-node`、`common.unknown-subcommand-input` / `-suggest` / `-hint`、`bot.config-set-usage`、`bot.sneak-usage`、`bot.sprint-usage`；`common.unknown-subcommand` 原文保留（`PunishCommand` / `TpaCommand` 共用）。
 
 ---
 
@@ -209,12 +229,11 @@ MenuCommand#execute
 | `rtp` | 19 | SPYGLASS | `actrtp` → 执行 `/rtp` 随机传送（受 `teleport.yml` 的 `rtp.enabled` 控制） |
 | `dominion` | 21 | GRASS_BLOCK | `cmd:dom`（执行 Dominion 的 `/dom`） |
 | `tpa` | 23 | COMPASS | `acttpa` → 打开「选择传送目标」界面 |
-| `chair` | 25 | OAK_SIGN | 无绑定（**纯说明按钮**，靠 lore 介绍告示牌椅子） |
 | `elytra` | 28 | ELYTRA | `actelytra` → 消耗 64 钻石**或** 8 下界残骸兑换鞘翅（见 §1.0） |
 | `ui-toggle` | 34 | BOOK | `acttoggleui` → 切换界面样式（dialogUI / 箱子） |
 
 > **布局（2.11.0 调整）**：5 行的内容行是 1~3（第 0/4 行、第 0/8 列是边框）——
-> 行 1 = back/home/warp/trashbin，行 2 = rtp/dominion/tpa/chair，行 3 = elytra/ui-toggle。
+> 行 1 = back/home/warp/trashbin，行 2 = rtp/dominion/tpa，行 3 = elytra/ui-toggle。
 > 2.10.x 的槽位整体比现在低一行（10~16 空着），已上移一行对齐 `menu.yml` 顶部的示意图。
 > 改槽位时**同步改 `menu.yml` 顶部那张 ASCII 图**，否则图和实际会对不上。
 
@@ -234,9 +253,6 @@ MenuCommand#execute
 两种界面**共用** `MenuManager.activeButtons / resolveAction / runAction / canOpen`，
 因此按钮内容与点击结果完全一致；`MenuListener` 已经薄化成「关界面 → `runAction`」。
 
-- **说明性按钮（没绑动作、只有 lore 的，如 `chair`）在两种界面里都会出现**：
-  箱子 UI 里它占一个格、点了没反应；dialogUI 里给 `customClick` 挂一个空回调，效果一致
-  （2.11.0 修：此前 `activeButtons` 会把它滤掉，导致 dialogUI 少一个按钮）。
 - **打开权限的提示文案优先取 `menu.yml` 的 `permission-message`**（MiniMessage，留空则回退
   `messages.yml` 的 `common.no-permission`）—— 这个键在 2.11.0 之前没有任何调用点。
 
@@ -288,7 +304,6 @@ MenuCommand#execute
 
 > **同类漂移统一由自检兜底（2.11.0）**：`SelfTest#checkElytraExchange` 查鞘翅 lore 的数字，
 > `SelfTest#checkLoreDrift` 另查两处 —— 随机传送按钮 lore 的冷却 vs `rtp.cooldown-seconds`、
-> 椅子说明按钮 lore 的关键字 vs `chair.yml` 的 `sign.left/right-keyword`。
 > 菜单钟 lore 里的「泥土」无法自动比对（代码里没有 Material→中文的映射表），改动时要手工同步。
 
 > **2.10.2 修复的坑（务必留意）**：
@@ -556,7 +571,7 @@ request(from, target, type)
 
 ## 3. 自动扫地（clean 包）
 
-**入口**：无命令，纯定时任务。`FloorCleanManager` 构造时启动 `runTaskTimer(20L, 20L)`（每秒 tick）。
+**入口**：`/sfp sweep on|off` 与 `/sfp sweep except add|remove <世界> <区块X> <区块Z>`（独立权限 `sfpmenu.clean.manage`）；纯定时任务由 `FloorCleanManager` 构造时启动 `runTaskTimer(20L, 20L)`（每秒 tick）。例外区块与开关持久化在 `data/sweep.db`；关闭时暂停倒计时，例外区块内物品不移除、不计数、不收入垃圾桶。
 
 ```
 每秒：
@@ -616,57 +631,26 @@ TrashBinCommand.openPage(plugin, player, manager, page)（供命令与翻页共�
 
 ---
 
-## 5. 椅子（chair 包）
+## 5. 椅子（已删除，2.15.0）
 
-**入口**：玩家在「左右各一块木质告示牌、第一行分别是配置关键字」的方块上右键。
-
-**椅子判定**（`ChairManager`）：
-```
-isChairBlock(block) → getChairFacingYaw(block) != null
-  findLeftSignFace：四个水平方向找相邻方块
-     ├─ 是允许木种的告示牌（材质以 allowed-woods 里某个前缀开头，且以 _SIGN/_WALL_SIGN/
-     │   _HANGING_SIGN/_WALL_HANGING_SIGN 结尾）
-     ├─ 第一行匹配 left-keyword
-     └─ 对面方块是同类告示牌且第一行匹配 right-keyword
-  → 由左侧告示牌朝向推出玩家应朝的方向（getFacingFromLeft + getYawFromFacing）
-```
-
-**坐下**（`ChairListener#onPlayerInteract`，仅主手 RIGHT_CLICK_BLOCK）：
-1. 已坐着且点的是**当前座位**且 `stand-on.reclick` → 起身
-2. `isChairBlock` 判定通过：
-   - `isBlockInUse` → 提示 `chair.occupied` 并取消事件
-   - 否则取消事件（阻止放置/交互）→ `sitPlayer()`
-
-`sitPlayer()`：按方块实际高度算坐姿（`seat-height-offset`）→ 生成**隐形小盔甲架**
-（`setGravity(false) / setVisible(false) / setInvulnerable(true) / setCustomName("stf-chair")`）
-→ `addPassenger(player)` → 记入 `sittingPlayers` / `chairBlocks` → 提示 `chair.sit`。
-
-**起身**（`standPlayer()` 移除盔甲架并清理两张表）触发点：
-
-| 触发 | 事件 | 配置 |
-|---|---|---|
-| 潜行 | `EntityDismountEvent`（潜行会自动从乘客位下来） | — （无条件） |
-| 再次右键同一座位 | `PlayerInteractEvent` | `stand-on.reclick` |
-| 破坏椅子或相邻方块 | `BlockBreakEvent`（椅子方块或其相邻 1 格） | `stand-on.break` |
-| 传送离开 | `PlayerTeleportEvent` | `stand-on.teleport` |
-| 退出游戏 | `PlayerQuitEvent` | — |
-
-另外 `onPlayerKick` 会**取消**「flying / 飞行 / moving too fast / 移动过快」这几种踢出，
-避免原版反作弊把坐在盔甲架上的玩家误踢。
-
-**插件卸载（`SfpMain#onDisable` → `ChairManager#shutdown`）**：把所有还在座上的玩家扶起来、
-移除盔甲架、清空两张表。2.11.0 补：此前没有这一步，玩家坐着时重载/禁用插件会留下
-**孤儿盔甲架**（映射随实例丢弃，实体再也回收不掉，只能重启服务端）。
+椅子功能已按要求整体删除：`chair` 包、`chair.yml`、菜单 `chair` 按钮与 `MenuHolder.ACTION_CHAIR`、
+`messages.yml` 的 `chair.*` 文案、`paper-plugin.yml` 的椅子权限节点、`SelfTest` 的椅子检查全部移除，
+`menu.yml` 的 ASCII 布局图也不再标注「坐」。这里保留章号只为让后续章节编号稳定（0~4、6~13 不变），
+不再有对应的代码与配置；如需恢复请参考 git 历史。
 
 ---
 
 ## 6. 假人（bot 包）
 
-**入口**：`/bot create|remove|list|removeall`（`sfpmenu.bot`，默认 op）。
+**入口**：`/sfp player <子命令>`（简写 `/sfp fp <子命令>`，权限 `sfpmenu.bot`，默认 op）。
+子命令由 `debug/SfpCommand` 在「管理权限检查**之前**」转交 `bot/BotCommand` ——
+假人有自己的权限节点，与 `/sfp` 的管理权限互不牵连。
 
 **假人是真正的玩家实体**（NMS `ServerPlayer`），不是盔甲架之类的近似物：
 它会出现在在线玩家列表里（`/list` 可见）、计入玩家数，并**天然保持周围区块加载**
 （实体本身不会保区块，只有玩家或区块 ticket 才会）。
+
+### 6.1 创建与生命周期（`NmsBotFactory` + `BotManager`）
 
 `NmsBotFactory#spawn`（全反射，Paper 无公开 API）：
 ```
@@ -676,29 +660,259 @@ Connection(PacketFlow.SERVERBOUND)          ← 本地假连接
 ServerGamePacketListenerImpl(server, connection, player, cookie)
 CommonListenerCookie.createInitial(profile, false)
 ServerPlayer.connection（public 字段）= listener
+ServerPlayer.gameMode（public 字段）        ← 动作系统的入口之一
 PlayerList#placeNewPlayer(connection, player, cookie)            ← 服务端自己的加入流程
 ```
 - `EmbeddedChannel` 是「吞包黑洞」：`placeNewPlayer` 会往连接写登录包，没有 channel 会 NPE。
   它没人消费的 outbound 队列由 `BotManager` 的定时任务（每 60 秒）清空，避免堆积。
 - 皮肤：从创建者 `CraftPlayer#getProfile()` 复制 `textures` 属性；`bot.yml` 的 `skin-source`
-  可改为指定玩家名或 `none`（默认皮肤）。
+  可改为指定玩家名或 `none`（默认皮肤）；留空则看假人设置的 `skin` 项。
 - UUID 由名字派生（`nameUUIDFromBytes("StarfallBot:" + 名字小写)`），所以**名字即身份**，重名直接拒绝。
 - 名字规则 `[A-Za-z0-9_]{1,16}`；`max-per-player` 限制每位玩家的数量（0=不限，控制台不计入）。
+- **移除**：反射调 `PlayerList#remove(ServerPlayer)`，再 `Player#remove()` 兜底。
+  **不能用 `Bukkit#kick()`** —— 它依赖向客户端发断开包，假连接发不出去，实测移除不掉。
+- **复活**：反射调 `PlayerList#respawn(ServerPlayer, false, RemovalReason.KILLED, RespawnReason.DEATH)`，
+  复活会生成**新实体**，所以复活后要重放设置（`BotManager#applySettings`）。
+  若服务端在假人死亡时已把它踢出，则只能重新 `spawn`。
 
 `BotManager`：
-- 记录写入 `bots.yml`（name/uuid/owner/world/x/y/z/yaw/pitch）
+- 记录写入 `bots.yml`（name/uuid/owner/world/x/y/z/yaw/pitch/**settings**/**actions**）
 - `setupBot()` 里 **`runTask` 延后一 tick** 调 `restoreOnStart()` 重建（避开插件启用栈，
   此时世界已加载完毕）；单个失败只记日志
-- `shutdown()` 停掉清理任务；`saveData()` 在创建/删除/禁用时写盘
+- `saveData()` 在创建/删除/改设置/开关动作/禁用时写盘；**在线假人会刷新位置**，
+  重启后回到最后所在处
+- `shutdown()` 停掉动作与清理任务；`startActions()` 启动周期任务（见 6.4）
+- 选择（`select`）：`Map<执行者UUID, 假人名>`，只存内存；执行者退出或假人被移除时清掉
 
-**移除**：反射调 `PlayerList#remove(ServerPlayer)`，再 `Player#remove()` 兜底。
-**不能用 `Bukkit#kick()`** —— 它依赖向客户端发断开包，假连接发不出去，实测移除不掉。
+### 6.2 命令一览（38 个子命令）
 
----
+| 子命令 | 说明 |
+|---|---|
+| `help` | 显示用法（等同不写子命令；2.16.1） |
+| `spawn <名字> [世界 x y z]` | 创建假人（省略坐标 = 当前位置；控制台必须给坐标） |
+| `kill [名字]` / `killall` | 移除假人 / 移除全部（后者另需 `sfpmenu.bot.killall`） |
+| `list` | 列出假人：位置、在线状态、当前持续动作 |
+| `select <名字>` / `selection` | 设定 / 查看默认假人（之后命令可省略名字） |
+| `status [名字]` | 生命 / 饱食度 / 位置 / 游戏模式 / 持续动作 / 全部设置 / 创建者 |
+| `distance [名字]` | 与假人的距离（跨世界时单独提示） |
+| `invsee [名字]` | 打开假人背包（**右键假人同效**，见 6.5） |
+| `skin <玩家名> [名字]` | 复制某玩家皮肤（在线直接取档案；离线走 `complete()`，需能访问 Mojang） |
+| `respawn [名字]` | 复活死亡的假人 |
+| `tp / tphere / tps [名字]` | 传送到假人 / 把假人拉过来 / 交换位置 |
+| `expme [名字]` | 把假人的全部经验转给自己 |
+| `cmd [名字] <命令...>` | 以假人身份执行命令（假人默认不是 op，可用 `/op 假人名` 提权） |
+| `drop / dropstack / dropinv [名字]` | 丢手持 1 个 / 丢整叠 / 丢整个背包（储物格 + 副手） |
+| `swap [名字]` / `hold <1-9> [名字]` | 主副手互换 / 切换快捷栏槽位 |
+| `set [名字] <键> <true\|false>` | 改**这个假人**的设置 |
+| `config list \| set <键> <值> \| clear` | **个人默认配置**（创建新假人时套用，按玩家 UUID 存 bots.yml） |
+| `attack / mine / use / move [名字]` | **持续动作**开关（对齐 minecraft-fakeplayer 的 periodical actions） |
+| `jump [名字]` | 跳一次 |
+| `sneak / sprint [名字] [on\|off]` | 潜行 / 疾跑（省略 on\|off 则切换） |
+| `look [名字] [x y z]` | 看向坐标（省略坐标 = 看向执行者） |
+| `turn <度数> [名字]` | 原地转向（相对角度，正数右转） |
+| `ride [名字]` | 骑上视线正前方的实体（再执行一次下车） |
+| `sleep / wakeup [名字]` | 睡觉 / 起床 |
+| `stop [名字]` | 停止全部持续动作 |
 
-## 7. 信息显示（display 包）
+**参数约定**：除 `spawn` / `skin` / `hold` / `set` / `config` 外，假人名都可省略 ——
+省略时用 `select` 设定的默认假人；命令里第一个参数**恰好是已存在的假人名**时会被当作假人名吃掉
+（所以 `look 100 64 100`（坐标）与 `look Steve 100 64 100`（带名字）都能用）。
 
-两块**纯展示**模块，内容全部由配置文件驱动（`tab.yml` / `scoreboard.yml`），
+### 6.3 设置项（`BotSettings`）
+
+每个假人一份（`bots.<名字>.settings`），每位玩家还有一份个人默认配置
+（`player-configs.<uuid>`，创建时覆盖 `bot.yml` 的 `defaults`）。全部布尔：
+
+| 键 | 默认 | 作用 |
+|---|---|---|
+| `collidable` | true | 碰撞盒。false = 其他玩家可以穿过假人（`Player#setCollidable`） |
+| `invulnerable` | true | 无敌。false = 会受伤挨饿（建议配合 wolverine） |
+| `wolverine` | false | 超级回复：定时把生命 / 饱食度回满 |
+| `look_at_entity` | false | 持续攻击时先看向目标（配合 `attack` 自动打怪） |
+| `pickup_items` | true | 自动捡起**符合 `pickup-whitelist`** 的掉落物（动作循环扫描周围物品，调用原版拾取流程） |
+| `replenish` | false | 主手/副手按**原物品模板**从背包（9~35）补货：同类且未满时补满、耗尽时用模板重建；不塞不相关物品、不动另一只手与非空格 |
+| `autofish` | false | 自动钓鱼：手持鱼竿时自动抛竿 → 等咬钩 → 收竿 |
+| `skin` | true | 创建时使用创建者自己的皮肤 |
+
+命令：`/sfp player set [名字] <键> <值>`（改现有假人，立即生效）、
+`/sfp player config set <键> <值>`（改自己的默认值，下次创建生效）。
+
+### 6.4 动作系统（`BotActions`）
+
+两条周期任务：**4 tick 的动作任务**（`action-interval-ticks`，攻击/挖掘/使用/设置循环）
+与 **1 tick 的移动任务**（移动需要每 tick 推进一小步，与真客户端发包频率一致）。
+
+| 动作 | 实现方式（26.3 实测结论） |
+|---|---|
+| `attack` | 半径 `attack-range` 内最近的可攻击实体：优先真正的生物，没有生物才打可打碎的盔甲架（跳过其他假人、默认跳过玩家、跳过 marker 与关掉重力的盔甲架）→ `Player#attack(Entity)` + `swingMainHand()`。攻击前先 `NmsBotFactory#chargeAttack` 把 `attackStrengthTicker` 顶满（假人不 tick，原版充能永远停在 0.1，见下方实测坑 5），再 `syncOnGround` 按脚下方块把 NMS `onGround` 校正为 true，**主手是剑时会自动触发原版横扫**；盔甲架在一个动作周期内连打两次（原版要求 5 tick 内两下才碎）；攻击间隔由 `BotActions` 自计时（12 tick ÷ 动作周期，默认 3 个周期 ≈ 0.6 秒），**不再读 `getAttackCooldown()`** |
+| `mine` | 自己走**体素射线**找视线上第一个实体方块 → 按硬度计时（`Block#getBreakSpeed` 返回的是**每 tick 破坏进度**，`ceil(1/进度)` 即所需 tick）→ 到点调 `ServerPlayerGameMode#destroyBlock`（掉落物 / BlockBreakEvent / 统计都走服务端正常流程，**没有原版裂纹动画**） |
+| `use` | 视线命中方块 → `ServerPlayerGameMode#useItemOn`（放置 / 交互）；否则 → `#useItem`（吃 / 拉弓 / 抛竿 / 桶）。**先主手、未 consume 再试副手**（`InteractionResult#consumesAction` 判定）；用完后按 `replenish` 设置补货 |
+| `move` | 按 yaw 算水平方向，每 tick 前进 0.216 格（疾跑 0.28）→ `ServerPlayer#snapTo` 改服务端坐标，由实体追踪器广播；脚/头位置被挡时尝试抬一格台阶，落脚高度按 ±5 格内的最近地面贴地 |
+| `jump` | `ServerPlayer#jumpFromGround()`（实测 Motion.y = 0.42） |
+| `sneak` / `sprint` | Bukkit `Player#setSneaking / setSprinting`（置位实体标志并广播） |
+| `look` / `turn` | NMS `setYRot/setXRot`（追踪器会自动广播转向；`/data get entity` 可见 Rotation 变化） |
+| `ride` | 视线射线取实体 → `Entity#startRiding(Entity)`；`leaveVehicle()` 下车 |
+| `sleep` / `wakeup` | NMS `startSleeping(BlockPos)`（不校验床）/ `stopSleeping()` |
+| `replenish` / `wolverine` | 按 `replenish-interval-ticks` / `wolverine-interval-ticks` 分频循环；补货只认主手/副手原物品类型，并只在原槽位为空/耗尽时从 9~35 找同类物品 |
+| `autofish` | 找自己的 FishHook：没有 → `useItem` 抛竿（≥10 个动作 tick 冷却）；有且 `biting` → `FishHook#retrieve`；超时（`autofish-timeout-seconds`）→ 收竿重抛 |
+
+**26.3 的实测坑（改动作前务必看）**：
+1. **玩家的位移是「客户端权威」的**。给假人发 `ServerboundPlayerInputPacket` / `ServerboundMovePlayerPacket`
+   都**不会**让它动（服务端只把输入当状态，位置以客户端上报为准，且没有真实客户端上报）。
+   想让它走只能改服务端坐标（`snapTo`），由追踪器广播。
+2. **`World#rayTraceBlocks` 在假人身上返回 null**（同样的 eyeLocation + direction，对真玩家正常）。
+   所以挖掘/使用都用自己的体素射线（`BotActions#lookingAt`，0.05 格步进）。
+   另外 `ServerPlayerGameMode#tick()` 在假人身上不会推进挖掘进度，挖掘只能自己计时后调 `destroyBlock`。
+3. **NMS 的 `onGround` 在假人身上永远是 false**（没有客户端移动包 → 服务端收不到
+   `ServerboundMovePlayerPacket`）。原版 `Player#attack` 的**横扫判定**（`isSweepAttack`）与**暴击判定**
+   都读这个字段，所以假人不校正就永远打不出横扫。现在 `NmsBotFactory#syncOnGround` 按脚下方块
+   （碰撞箱顶面距脚底 ≤0.1 格）反射写 `Entity#setOnGround`，在攻击前、`moveTo` 每步、
+   重放设置（创建 / 重建 / 复活 / 传送）时调用。注意 `Player#tick` 只在旁观/骑乘时重置它，
+   生存假人置 true 后不会被 tick 打回 false。
+4. **盔甲架要连打两次才碎**：原版 `ArmorStand#hurtServer` 普通伤害分支要求 `mayBuild`，且
+   `time - lastHit > 5` 时只广播「打歪」并记 `lastHit`，不扣血 —— 5 tick 内的第二下才 `brokenByPlayer()+kill`。
+   所以 `attack` 命中盔甲架时同一周期连调两次 `attack`（动作周期默认 4 tick，天然落在 5 tick 窗口内）。
+5. **攻击充能 `attackStrengthTicker` 冻结（假人打不出伤害的真正原因）**：这个字段只在
+   `Player#tick()` 里自增（26.3 反编译 `Player.java:303`），而假人没有真实连接、
+   `ServerPlayer#tick()` 不会被驱动 → `getAttackCooldown()` 永远是 0.1 左右，原版判定「没蓄满力」：
+   伤害只剩两成、没有横扫，用 `>= 0.95` 当攻击门槛时**一次都打不出去**。
+   现在 `NmsBotFactory#chargeAttack` 反射把 ticker 置 100（`attack()` 内部会归零），
+   攻击节奏改由 `BotActions#attackReadyAt` 按动作周期自计时（默认 3 周期 ≈ 12 tick ≈ 0.6 秒）。
+
+**`biting` 字段**是 private，反射读取时必须 `getDeclaredField` + `setAccessible`
+（`Class#getField` 只找 public，找不到会走负缓存 —— 而 `ConcurrentHashMap` 不接受 null 值，
+所以字段负缓存有专门的哨兵 `MISSING_FIELD`）。
+
+### 6.5 可编辑背包界面（`BotInventoryManager` + `BotListener`）
+
+右键假人 / `/sfp player invsee` 都打开**可编辑**的 54 格界面（`sfpmenu.bot`）。
+不用 `Player#openInventory(假人背包)`：箱子界面拿不到副手槽，且直接暴露原版背包容器会
+让点击落到服务端默认逻辑上（可能复制物品）。这里自己维护 `BotInventoryHolder` +
+`BotInventorySession`：**展示物只是副本**，每次点击先取消事件、再从假人实时 `PlayerInventory`
+读当前值做增量提交，关闭界面**不回写**，所以多个查看者、假人自己拾取/使用都不会互相覆盖。
+
+槽位布局（改动要同步 `BotInventoryManager` 常量与 `messages.yml`）：
+
+| 槽位 | 内容 |
+|---|---|
+| 0~35 | 假人储物格（`PlayerInventory` 的 0~35，实时双向） |
+| 36 / 37 | 「主手」「副手」说明牌（铁剑 / 盾牌图标，只作说明） |
+| 44 | 「储物格」说明牌（箱子图标） |
+| **45** | **主手实槽** —— 映射到假人当前快捷栏槽（`getHeldItemSlot()`），与 0~8 里那格是同一个物品 |
+| **46** | **副手实槽** —— 映射到 `PlayerInventory` 的 40 |
+| 49 / 53 | 说明纸 / 关闭按钮 |
+
+- 每 tick 刷新一次（`runTaskTimer` 1 tick），`valid()` 发现查看者掉线/失权限、假人离线/死亡/
+  被重建、界面被顶掉，就提示 `bot.inventory-unavailable` 并在下一 tick 关闭。
+- 支持：左右键（整叠/折半/放置/交换）、Shift（只在双方 0~35 储物格间移动，主手别名与副手
+  **不会**变成第二个搬运目标）、数字键与 F 键（**只作用于上方假人槽位**，交换到查看者快捷栏/副手）。
+- 明确拒绝：拖拽、双击收集、创造模式克隆、窗口外丢弃 —— 只提示 `bot.inventory-unsupported`，
+  避免复制或误丢；要丢东西先取回自己背包，关界面再丢。
+- **盔甲不在编辑器范围内**（假人很少穿甲）；事件全部在主线程处理，`shutdown()` 关掉所有会话。
+
+### 6.6 PAPI 占位符（`BotPlaceholders`）
+
+```
+%fakeplayer_total%            假人总数（记录数）
+%fakeplayer_online%           已加入服务端的数量
+%fakeplayer_creator_<名字>%   某个假人的创建者名
+%fakeplayer_actions_<名字>%   某个假人的持续动作（如 攻击|挖掘，没有则为 空）
+```
+装上 PlaceholderAPI 才注册（`join-classpath: true`）。
+
+
+## 7. 连锁挖矿（chain 包）
+
+**玩法**：玩家**蹲下**挖掉一块矿 → 同一条矿脉里相连的同种矿一起被挖掉，按方块量扣饱食度。
+**只做矿石**，砍树不在此版本范围内（矿石有明确的「矿脉」概念，天然安全；木头没有）。
+
+### 7.1 防误伤：为什么不会误伤建筑
+
+Minecraft 方块**没有「自然生成 / 玩家放置」的原生标记** —— `BlockData` 里只有 `axis` 之类的轴向信息，
+读不出「这根木头 / 这块矿石是人摆的还是长出来的」。所以连锁算法必须自己定义边界，
+本模块用了三层闸门：
+
+| 闸门 | 做法 | 拦住了什么 |
+|---|---|---|
+| **只连锁同种方块** | 从起点做 26 邻域 BFS，遇到非目标方块立刻停止扩散，**不跨越** | 矿脉旁边的建筑、装饰方块不会被带着走 |
+| **蹲下才触发** | `require.sneak`（默认开） | 站着正常挖矿完全不受影响 |
+| **总量上限** | `max-blocks`（默认 32） | 在巨型矿脉里不会一次挖穿几千块，避免掉落爆量与区块加载风暴 |
+| **假人不参与** | `require.chain-bots`（默认关） | 假人是工具人，连锁会瞬间吃光矿脉并扣饱食度，对它没意义 |
+
+> 关于「连锁砍树会不会把建筑的木头一起砍掉」：**如果做砍树，这个风险是真实存在的**，
+> 而且不能靠「原版有标记」来规避。可行的解法是**树形几何判定**（向上扫同列木头，
+> 主干高度 ≥ 阈值且其正上方有树叶才算树）+ **PDC 记录玩家放置的方块**（`BlockPlaceEvent`
+> 打标记，连锁时跳过）。两者叠加才够稳。本版本没做砍树，等需要时再上。
+
+### 7.2 触发流程（`ChainListener` + `ChainManager`）
+
+```
+BlockBreakEvent（NORMAL 优先级，ignoreCancelled）
+  └─ 逐条闸门：模块启用 / 世界在范围内 / 方块在白名单 / 非假人 / 生存模式 / 蹲下 / 手持工具
+      └─ collect()：26 邻域 BFS 收集同种矿（上限 max-blocks，不跨未加载区块）
+          └─ affordableCount()：按当前饱食度算「最多能连锁几块」
+              ├─ 0 块 → 提示「饱食度不足」，只挖玩家亲手挖的第一块
+              └─ N 块 → 逐块 breakNaturally() → chargeFood() → 提示
+```
+
+**优先级选 NORMAL 而不是 MONITOR，有两个理由**：
+1. **要能被取消** —— 连锁的每一块都自己发 `BlockBreakEvent`，领地保护插件（通常 HIGH/MONITOR）
+   必须有机会先取消它们，否则连锁等于绕过保护；
+2. **要看到最终方块** —— MONITOR 阶段方块可能已被别的逻辑改成空气。
+
+**重入保护**：连锁内部发的 `BlockBreakEvent` 会再次进入本监听器，
+用 `ThreadLocal<Boolean>` 标志阻止无限递归。
+
+### 7.3 为什么逐块手动挖，而不是复制掉落物
+
+连锁的每一块都走完整流程：**先发 `BlockBreakEvent` → 再 `setType(AIR)` → 最后按事件结果手动投放掉落物**。
+不用 `block.breakNaturally(tool)`（它自己也会丢一遍，叠加成双份掉落）。
+
+这样做是为了拿到三样东西，缺一不可：
+- **经验** —— 原版经验来自挖方块事件的结算，手动清空方块拿不到
+- **其他插件的监听** —— 领地保护、CoreProtect、统计类插件全靠这个事件，不触发等于绕过保护
+- **工具耐久与采集等级** —— 钻石镐挖和普通镐挖的掉落不同，由原版结算路径决定
+
+### 7.4 扣饱食度（`ChainConfig#exhaustionPerBlock`）
+
+- 按**连锁额外挖掉的方块数**收费（玩家亲手挖的第一块走原版规则，不额外收费）
+- 默认每块 **0.1 点**（挖 10 块约扣 1 点），累加后从 `Player#setFoodLevel` 扣
+- 扣费按**实际连锁掉的数量**结算 —— 被保护插件取消掉的方块不扣钱
+- 饱食度掉到 0 时 `stop-when-hungry` 会停止连锁；不足全额时部分生效并提示
+- 饱和度按比例跟着降，避免出现「饿度低但饱和度满」的不一致
+
+### 7.5 配置（`chain.yml`）
+
+| 键 | 默认 | 说明 |
+|---|---|---|
+| `enabled` | true | 总开关 |
+| `require.sneak` | true | 必须蹲下才触发 |
+| `require.require-tool` | true | 必须手持镐/斧/锹/锄 |
+| `require.survival-only` | true | 创造/冒险模式不触发 |
+| `require.chain-bots` | false | 假人挖矿是否也连锁（默认不） |
+| `max-blocks` | 32 | 单次连锁总量上限（不是固定半径） |
+| `food.exhaustion-per-block` | 0.1 | 每块扣多少饱食度 |
+| `food.stop-when-hungry` | true | 扣到 0 就停 |
+| `blocks` | `[]`（用内置表） | 参与连锁的 Material 名 |
+| `give-experience` | true | 是否给经验 |
+| `sound.*` | 开 | 连锁音效（整片一次 / 每块一次） |
+| `worlds.whitelist/blacklist` | `[]` | 生效世界范围（黑名单优先） |
+| `message.enabled` | true | 是否提示结果 |
+
+**内置默认表**（`ChainDefaults`，共 15 种）：`COAL_ORE` / `DEEPSLATE_COAL_ORE` /
+`COPPER_ORE` / `DEEPSLATE_COPPER_ORE` / `IRON_ORE` / `DEEPSLATE_IRON_ORE` /
+`GOLD_ORE` / `DEEPSLATE_GOLD_ORE` / `REDSTONE_ORE` / `DEEPSLATE_REDSTONE_ORE` /
+`LAPIS_ORE` / `DEEPSLATE_LAPIS_ORE` / `NETHER_GOLD_ORE` / `NETHER_QUARTZ_ORE` / `ANCIENT_DEBRIS`。
+
+不收录钻石 / 青金石 / 绿宝石（单块散布的宝石，不是矿脉），也不收录泥土 / 石头 / 砂砾（地形方块）。
+
+⚠ 表里的名字必须真实存在于 `Material` —— 拼错不抛异常，只会让连锁对该矿**静默失效**。
+`/sfp test` 的「连锁挖矿」段会逐个核对（2026-10-18 首次运行时就靠它抓出了
+`DEEPSLATE_REDSLONE_ORE` 的拼写错误，正确名是 `DEEPSLATE_REDSTONE_ORE`）。
+
+## 8. 信息显示（display 包）
+
+两块**纯展示**模块，内容全部由配置文件驱动（`display.yml` 的 `tab` / `scoreboard` 两段），
 支持 MiniMessage + 内置占位符 + PlaceholderAPI 占位符，按 `refresh-ticks`（默认 20 = 每秒）刷新。
 
 **内置占位符**（`display/DisplayText`，不依赖任何插件）：
@@ -716,22 +930,22 @@ PlayerList#placeNewPlayer(connection, player, cookie)            ← 服务端�
 就会以字面形式显示出来。PAPI 用**反射**调用（可选依赖，直接引用会在未装 PAPI 时类加载失败），
 返回值里的 `§` 色码交给 `LegacyComponentSerializer` 解析。
 
-### 7.1 Tab 列表（`display/TabManager`）
+### 8.1 Tab 列表（`display/TabManager`）
 
-- `tab.yml` 的 `header` / `footer` 各是多行列表 → `Audience#sendPlayerListHeaderAndFooter`
+- `display.yml` 的 `tab.header` / `tab.footer` 各是多行列表 → `Audience#sendPlayerListHeaderAndFooter`
   （注意：Paper 的 `Player` 上没有 `setPlayerListHeaderFooter`，那是旧 API）
 - 每秒为所有在线玩家刷新一次
 
-### 7.2 计分板（`display/ScoreboardManager`）
+### 8.2 计分板（`display/ScoreboardManager`）
 
-- `scoreboard.yml` 的 `title` + `lines`（最多 15 行，超出会告警并截断；`""` 表示空行）
+- `display.yml` 的 `scoreboard.title` + `scoreboard.lines`（最多 15 行，超出会告警并截断；`""` 表示空行）
 - 每位玩家一个**独立** `Scoreboard`（`Bukkit.getScoreboardManager().getNewScoreboard()`），
   不污染服务端主计分板；行内容用 `Score#customName(Component)` 承载（entry 只是内部 key，不显示），
   并用 `Objective#numberFormat(NumberFormat.blank())` 隐藏行尾的分数数字
 - 玩家退出时丢弃其计分板实例（`PlayerQuitEvent`）
 - ⚠️ 其他插件若也占用右侧计分板会互相覆盖，建议只留一个
 
-### 7.3 音效解析（`util/SoundUtil`）
+### 8.3 音效解析（`util/SoundUtil`）
 
 配置里既支持 Bukkit 枚举名（`ENTITY_ENDERMAN_TELEPORT`）也支持注册名
 （`minecraft:entity.enderman.teleport`）。查找走 `Registry.SOUNDS` + 首次构建的名称缓存 ——
@@ -739,12 +953,12 @@ PlayerList#placeNewPlayer(connection, player, cookie)            ← 服务端�
 `Sign#getLine(int)`、`PlayerKickEvent#getReason()` 在 2.6.0 也都换成了 Adventure 版本
 （`customName(Component)`、`Sign#line(int)`、`reason()`）。
 
-## 8. 处罚系统（punish 包）
+## 9. 处罚系统（punish 包）
 
 定时**封禁 / 禁言**、**踢出 / 警告**，外加查询与解除。数据存于**独立** `punish.db`
 （与 `teleport.db` 完全隔离：独立文件、独立连接，删库互不牵连）。
 
-### 8.1 命令一览
+### 9.1 命令一览
 
 | 命令 | 目标范围 | 时间参数 | 权限 |
 |---|---|---|---|
@@ -762,9 +976,9 @@ PlayerList#placeNewPlayer(connection, player, cookie)            ← 服务端�
   要解的几乎都是离线玩家。补全目标也是这份名单。
 - 目标解析顺序（`PunishManager#resolveTarget`）：在线玩家 → `players` 表 → `Bukkit.getOfflinePlayerIfCached`。
 - 命令反馈文案走 `messages.yml` 的 `punish.*` 键；
-  **踢下线整屏 / 禁言提示 / 全服广播**这类需要高度自定义的文案放 `punish.yml`（见 §8.4）。
+  **踢下线整屏 / 禁言提示 / 全服广播**这类需要高度自定义的文案放 `punish.yml`（见 §9.5）。
 
-### 8.2 数据结构（三张表，`punish.db`）
+### 9.2 数据结构（三张表，`punish.db`）
 
 ```
 players            uuid(PK) / name / last_seen
@@ -791,19 +1005,25 @@ punishment_logs    log_id(AUTOINCREMENT) / punishment_id / player_uuid / player_
   + `migrate(from)` 追加 `if (from < N)`），当前 v1。
 - 数据库不可用时静默降级：命令统一回「该功能当前未启用」，不抛异常。
 
-### 8.3 数据库位置（可自定义 / 可接入现有库）
+### 9.3 数据库位置（可自定义 / 可接入现有库）
 
-`punish.yml` 的 `database.file` 支持三种写法，由 `PunishDatabase#resolveDbFile` 解析：
+`punish.yml` 的 `database.file` 支持三种写法，由 `util/DatabaseFileResolver#resolve` 统一解析
+（传送库 `teleport.db`、界面偏好 `settings.db` 走同一套规则）：
 
 | 写法 | 示例 | 解析结果 |
 |---|---|---|
-| 文件名 | `punish.db` | `plugins/SFP-main/punish.db`（默认，与旧行为一致） |
-| 相对路径 | `data/punish.db` | `plugins/SFP-main/data/punish.db` |
+| 纯文件名 | `punish.db` | `plugins/SFP-main/data/punish.db`（**默认**；旧版根目录同名文件首次启动自动迁入） |
+| 带目录相对路径 | `data/punish.db` | `plugins/SFP-main/data/punish.db`（**保持旧语义**，不再额外加 data/） |
 | 绝对路径 | `D:/mc/shared/punish.db` | 直接用该文件 |
 
 - **绝对路径**用于把数据放到插件目录之外（挂载盘、跨服共享目录），或接入现成的处罚库。
 - **父目录不存在会自动 `mkdirs()`**，避免 SQLite 报 `path to database does not exist`。
-- 配置值为空 / 纯空白时回落到 `punish.db`（`trim()` 后判空）。
+- 配置值为空 / 纯空白时回落到默认名 `punish.db`（`trim()` 后判空），即 `data/punish.db`。
+- **旧版迁移**：只对「纯文件名」做迁移 —— 根目录 `punish.db` 搬到 `data/punish.db`，
+  `-wal` / `-shm` 必须一起搬（WAL 里可能有未 checkpoint 的事务）。
+  若新旧两处**主库都存在**，无法判断哪份更新，**拒绝启动并打 severe 日志**，
+  绝不静默挑一个（同理：目标主库不存在但 data/ 里已有 `-wal`/`-shm` 也拒绝）。
+  迁移中途失败会回滚已搬的 `-wal`/`-shm` 并抛异常中止启动，避免创建空库覆盖真实数据。
 - **接入已有库的前提是表结构兼容**（需要 `players` / `punishments` / `punishment_logs` 三张表，
   可用 `/sfp test` 校验）。若 `PRAGMA user_version` 高于本插件版本，`initSchema()` 只记一条
   warning、**不做任何结构变更**，不会破坏原库。别家插件（LiteBans / AdvancedBan）表结构不同，
@@ -814,7 +1034,7 @@ punishment_logs    log_id(AUTOINCREMENT) / punishment_id / player_uuid / player_
   ⚠ SQLite 在**跨机共享**（NFS/SMB）下并发写有损坏风险，多服同库建议放在**同一台机器**的
   共享目录；跨机场景请改用支持并发的数据库方案。
 
-### 8.4 惰性到期判定（核心设计）
+### 9.4 惰性到期判定（核心设计）
 
 **不轮询、不定时扫描**。`expire_at` 只在下面这些「必要时机」被检查，
 过期即删除生效记录 + 补一条 `EXPIRE` 历史日志：
@@ -833,7 +1053,7 @@ punishment_logs    log_id(AUTOINCREMENT) / punishment_id / player_uuid / player_
 
 > 库始终是唯一真相来源，缓存只是让异步判定安全的副本。
 
-### 8.5 文案（punish.yml）
+### 9.5 文案（punish.yml）
 
 **本模块全部面向玩家的文案都放 `punish.yml`**（不回退 messages.yml）——
 「自定义踢人 / 封禁消息」是核心诉求，集中一处最好改。可用占位符：
@@ -847,7 +1067,7 @@ punishment_logs    log_id(AUTOINCREMENT) / punishment_id / player_uuid / player_
 | `messages.mute-notice` | 被禁言者发言时收到的提示 |
 | `sounds.punish` / `sounds.revoke` | 执行处罚 / 解除时**给执行者**播放的音效（2.11.0 起真正生效；控制台执行时跳过） |
 | `broadcast.enabled` / `broadcast.format` | 执行封禁/禁言时是否全服公告、公告格式 |
-| `kick-delay-ticks` | 踢出前的延迟 tick 数（默认 1；跨服环境必须 ≥1，见 §8.7） |
+| `kick-delay-ticks` | 踢出前的延迟 tick 数（默认 1；跨服环境必须 ≥1，见 §9.7） |
 
 `messages.yml` 里的 `punish.*` 是命令执行后的**简短反馈**（已 / 已警告 XX，编号 YYY）——
 2.11.0 起**所有**反馈都在这里，包括用法提示、时间格式错误、查不到玩家、`/sfpcheck` 的表头表尾
@@ -857,12 +1077,12 @@ punishment_logs    log_id(AUTOINCREMENT) / punishment_id / player_uuid / player_
 > 警告（WARN）按设计不写生效表、也没有「已读」状态，无法判定「未读」，该键从来没有调用点。
 > `PunishConfig` 里的 `getJoinWarnNotice()` / `joinWarnNotice(Map)` 一并移除。
 
-### 8.6 处罚 ID
+### 9.6 处罚 ID
 
 6 位**字母数字混合**（字符集去掉了易混淆的 `0/O/1/I/l`），生成时用 `PunishStore#idExists` 查重，
 碰撞则重试（`SecureRandom`）。
 
-### 8.7 踢出时机与跨服代理（2.10.1 修复）
+### 9.7 踢出时机与跨服代理（2.10.1 修复）
 
 **所有踢人动作一律延后 `punish.yml` 的 `kick-delay-ticks`（默认 1）个 tick 再真正断开**，
 不允许在事件里立刻 `kick()`。涉及三处：`PunishListener#scheduleBanKick`（进服拦截封禁）、
@@ -894,18 +1114,24 @@ punishment_logs    log_id(AUTOINCREMENT) / punishment_id / player_uuid / player_
 
 ---
 
-## 9. 数据与持久化
+## 10. 数据与持久化
 
-| 存储 | 文件 | 存放内容 | 代码 |
+所有**数据文件一律放在插件目录的 `data/` 子目录**（`plugins/SFP-main/data/`），
+与配置文件分开，便于整目录备份 / 迁移 / 加忽略规则。路径由 `util/DatabaseFileResolver` 统一解析，
+旧版放在插件根目录的同名文件会在首次启动时**自动迁入 `data/`**（规则见 §9.3：
+纯文件名 → `data/`；带目录相对路径与绝对路径保持原样；新旧并存拒绝启动）。
+
+| 存储 | 文件（相对 `plugins/SFP-main/`） | 存放内容 | 代码 |
 |---|---|---|---|
-| SQLite | `teleport.db` | `homes` / `warps` / `last_locations` | `Database` + 三个 Store |
-| SQLite | `punish.db` | `players` / `punishments` / `punishment_logs` | `PunishDatabase` + `PunishStore` |
-| SQLite | `settings.db` | `ui_preferences`（界面样式偏好）、`tpa_ui_preferences`（传送回应界面偏好） | `UiPreferenceStore` |
-| YAML | `trashbin-data.yml` | 垃圾桶物品列表 | `TrashBinManager` |
-| YAML | `bots.yml` | 假人记录（用于重启重建） | `BotManager` |
+| SQLite | `data/teleport.db` | `homes` / `warps` / `last_locations` | `Database` + 三个 Store |
+| SQLite | `data/punish.db` | `players` / `punishments` / `punishment_logs` | `PunishDatabase` + `PunishStore` |
+| SQLite | `data/settings.db` | `ui_preferences`（界面样式偏好）、`tpa_ui_preferences`（传送回应界面偏好） | `UiPreferenceStore` |
+| SQLite | `data/sweep.db` | 自动扫地开关、例外区块 | `SweepExceptionStore` |
+| YAML | `data/trashbin-data.yml` | 垃圾桶物品列表 | `TrashBinManager` |
+| YAML | `data/bots.yml` | 假人记录：名字 / UUID / 创建者 / 位置 / **设置** / **持续动作**，外加 `player-configs` 个人默认配置（用于重启重建） | `BotManager` |
 | 内存 | — | tpa 请求、传送冷却、延迟传送队列、在座玩家、生效处罚缓存 | 各 Manager |
 
-### 9.1 传送数据库分层
+### 10.1 传送数据库分层
 
 ```
 TeleportManager
@@ -928,7 +1154,7 @@ TeleportManager
   当前全部调用都在主线程（命令 / 事件 / GUI / 同步调度任务）。
   **若以后改成异步保存，必须给数据访问层补同步。**
 
-### 9.2 表结构迁移（改表结构必看）
+### 10.2 表结构迁移（改表结构必看）
 
 `Database` 里有 `SCHEMA_VERSION`，存在 SQLite 的 `PRAGMA user_version`。
 老库与新库的 `user_version` 都是 0，所以从 0 逐级判断能同时覆盖两种情况。
@@ -945,14 +1171,15 @@ TeleportManager
 SQLite 的 `ALTER TABLE` 限制：只能加列 / 改列名 / 删列（3.35+），
 **不能**加「无默认值的 NOT NULL 列」，也不能改列类型或主键。
 
-### 9.3 备份建议
+### 10.3 备份建议
 
-正常停服后 `-wal` 会自动合并回 `teleport.db`，**直接拷 `teleport.db` 即可**；
-开服状态下想拷贝，先执行 `/sfp db checkpoint`。
+正常停服后 `-wal` 会自动合并回主库，**直接拷整个 `plugins/SFP-main/data/` 目录即可**；
+开服状态下想单拷传送库，先执行 `/sfp db checkpoint` 把 WAL 并回 `data/teleport.db`，
+再连同 `data/` 下的 `-wal` / `-shm` 一起拷（或干脆整目录拷）。
 
 ---
 
-## 10. 改动时的注意事项（踩坑清单）
+## 11. 改动时的注意事项（踩坑清单）
 
 1. **改 `resources/*.yml` 里已存在键的默认值 → 必须手工同步服务器上的同名配置**。
    `mergeDefaults()` 只补缺失键、不覆盖已有键。**删按钮/删键也一样要手工删线上的**。
@@ -963,7 +1190,7 @@ SQLite 的 `ALTER TABLE` 限制：只能加列 / 改列名 / 删列（3.35+）�
    `load()` → `onLoaded()`，而 Java 是在 `super(...)` 返回**之后**才执行子类字段初始化器 ——
    那一刻集合字段还是 null（NPE），而且初始化器随后还会把填好的内容覆盖成空集合。
    集合类字段一律在 `onLoaded()` 内部 `new`。（2.0.3 修的启动崩溃就是这个）
-3. **改表结构必须走 §8.2 的两步**，否则老库不会升级。
+3. **改表结构必须走 §10.2 的两步**，否则老库不会升级。
 4. **新增菜单按钮**：只需改 `menu.yml`（`buttons.<id>` + 必要时 `bind.*-button`）。
    若要内部动作，才需要动 `MenuHolder`（加常量）+ `MenuManager`（`resolveAction` /
    `isFeatureEnabled`）+ `MenuListener`（分派）。`command:` 留空且不在 `bind.*` 里 = 点了没反应
@@ -979,19 +1206,20 @@ SQLite 的 `ALTER TABLE` 限制：只能加列 / 改列名 / 删列（3.35+）�
    正确顺序：停服 → 旧 jar 改名 `xxx.jar.bak`（Paper 只扫 `*.jar`）→ 拷新 jar → 启动。
 8. **NMS 反射（假人）随 Minecraft 版本可能失效**：签名先用服务端 jar 反射核对
    （`versions/<ver>/paper-*.jar` + `libraries/**`），失败时看日志里的「假人重建失败」异常。
+   假人的动作走 `ServerPlayer` / `ServerPlayerGameMode` 的直接方法，不依赖发包；
+   26.3 的两个实测坑见 6.4。
 9. `paper-plugin.yml` 的 `api-version` 只有**大版本**（如 `'26.1'`），
    改动它的语义是「放弃对更老版本的兼容」。
 
 ---
 
-## 11. 已知未生效 / 预留的配置项
+## 12. 已知未生效 / 预留的配置项
 
 以下五项曾在代码中「定义了但没人用」，**2.5.0 已全部删除**（配置键 + 代码访问器 + 引用一并清理）：
 
 | 配置项 | 原状态 |
 |---|---|
 | `teleport.allow-cross-world` | 内核条件被六个传 `true` 的调用点短路，永不生效（删除后 `teleport()` 签名也去掉了 `crossWorldAllowed` 参数） |
-| `chair.stand-on.sneak` | 无引用；潜行起身实为 `EntityDismountEvent` 无条件处理 |
 | `clean.worlds.only-loaded-chunks` | 无引用 |
 | `trashbin.global` | 无引用；按玩家隔离未实现 |
 | `config.yml` 的 `currency-name` | `GlobalConfig#getCurrencyName()` 无调用点，扫地广播的 `{currency}` 占位符也是死代码 |
@@ -1001,7 +1229,7 @@ SQLite 的 `ALTER TABLE` 限制：只能加列 / 改列名 / 删列（3.35+）�
 | 配置项 | 原状态 |
 |---|---|
 | `clean.skip-named-items` | 想表达「改名物品别扫」，但语义与文档相反（实际是留在地上），见 §3 |
-| `punish.messages.join-warn-notice` | 毫无调用点，且 WARN 不写生效表、无「已读」状态，无法判定「未读」，见 §8.5 |
+| `punish.messages.join-warn-notice` | 毫无调用点，且 WARN 不写生效表、无「已读」状态，无法判定「未读」，见 §9.5 |
 
 另有 2 个键是「写了但没接上」，**2.11.0 修好而不是删掉**：
 
@@ -1013,7 +1241,7 @@ SQLite 的 `ALTER TABLE` 限制：只能加列 / 改列名 / 删列（3.35+）�
 > 上面这些死键如果还留在某台服务器的配置文件里，`/sfp test` 会逐条报出来（提示删除）——
 > 排查依据就是 `SelfTest` 里那段按版本累积的失效键清单。
 
-## 12. 新增功能检查清单
+## 13. 新增功能检查清单
 
 - [ ] `resources/` 加 `xxx.yml`（首字段 `enabled`，注释写清每个键）
 - [ ] `config/module/XxxConfig.java` 继承 `AbstractConfig`，`onLoaded()` 里读值
@@ -1025,9 +1253,9 @@ SQLite 的 `ALTER TABLE` 限制：只能加列 / 改列名 / 删列（3.35+）�
       诊断类输出除外）
 - [ ] 若要命令：写 `XxxCommand implements BasicCommand`，在 `registerCommands()` 里注册，
       权限节点补进 `paper-plugin.yml`
-- [ ] 若要界面：新建 Holder + Gui，点击统一挂在对应 Listener；导航行沿用 §2.6 的槽位约定
-- [ ] 数据持久化：能进 SQLite 的走 db 包（注意 §9.2 的迁移步骤）；
-      小数据用 YAML；**纯会话态一律放内存**；异步线程要读的数据放内存缓存（参考 §8.3）
+- [ ] 若要界面：新建 Holder + Gui，点击统一挂在对应 Listener；导航行沿用 §2.7 的槽位约定
+- [ ] 数据持久化：能进 SQLite 的走 db 包（注意 §10.2 的迁移步骤）；
+      小数据用 YAML；**纯会话态一律放内存**；异步线程要读的数据放内存缓存（参考 §9.4）
 - [ ] 若绑定菜单按钮：`menu.yml` 加按钮 + `bind.*-button`，并按第 4 条改三个类
 - [ ] **把本功能写进 features.md**（入口 / 调用链 / 流程 / 配置键 / 权限 / 数据文件）
 - [ ] 构建 + 真机冒烟（`/sfp test` 应全绿；GUI 与交互需真人验证）
